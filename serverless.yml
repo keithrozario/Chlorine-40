@@ -1,0 +1,68 @@
+
+service: cert-transparency
+
+custom:
+  awsRegion: us-east-1
+  bucketName: cert-domains
+  dbTableName: cert-domains
+
+provider:
+  name: aws
+  runtime: python3.7
+  region: ${self:custom.awsRegion}
+  environment:
+    bucket_name: ${self:custom.bucketName}
+    db_table_name : ${self:custom.dbTableName}
+  iamRoleStatements:
+  - Effect: Allow
+    Action:
+    - s3:PutObject
+    - s3:GetObject
+    - s3:DeleteObject
+    - s3:PutObjectAcl
+    - s3:GetObjectAcl  # ACL permissions required for file_upload
+    - s3:AbortMultipartUpload
+    Resource:
+      Fn::Join:
+      - ""
+      - - "arn:aws:s3:::"
+        - ${self:custom.bucketName}
+        - "/*"
+  - Effect: Allow
+    Action:
+    - dynamodb:GetItem
+    - dynamodb:PutItem
+    - dynamodb:BatchGetItem
+    - dynamodb:Query
+    - dynamodb:BatchWriteItem
+    Resource:
+      Fn::Join:
+      - ""
+      - - "arn:aws:dynamodb:"
+        - ${self:custom.awsRegion}
+        - ":"
+        - { Ref: "AWS::AccountId" }
+        - ":table/"
+        - ${self:custom.dbTableName}
+
+package:
+  exclude:
+    - node_modules/**
+    - .serverless
+    - venv/**
+    - package.json
+    - package-lock.json
+    - .gitignore
+    - requirements.txt
+    - test.json
+
+functions:
+  query_logs:
+    handler: query_logs.query_to_db
+    timeout: 300
+    memorySize: 512
+    layers:
+      - arn:aws:lambda:${self:custom.awsRegion}:113088814899:layer:Klayers-python37-aiohttp:4
+      - arn:aws:lambda:${self:custom.awsRegion}:113088814899:layer:Klayers-python37-pyOpenSSL:1
+      - arn:aws:lambda:${self:custom.awsRegion}:113088814899:layer:Klayers-python37-tldextract:1
+      - arn:aws:lambda:${self:custom.awsRegion}:113088814899:layer:Klayers-python37-construct:1

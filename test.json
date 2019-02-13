@@ -1,0 +1,6 @@
+{
+  "log_url": "https://ct.googleapis.com/logs/argon2018",
+  "start_pos": 0,
+  "end_pos": 256,
+  "max_block_size": 64
+}
