@@ -2,14 +2,18 @@
 service: cert-transparency
 
 custom:
-  awsRegion: us-east-1
-  bucketName: cert-domains
-  dbTableName: cert-domains
+  awsRegion: ${file(config.json):aws_region}
+  bucketName: ${file(config.json):bucket_name}
+  dbTableName: ${file(config.json):dynamodb_table_name}
+
 
 provider:
   name: aws
   runtime: python3.7
+  stage: ${opt:stage, 'dev'}
   region: ${self:custom.awsRegion}
+  versionFunctions: false
+  logRetentionInDays: 1
   environment:
     bucket_name: ${self:custom.bucketName}
     db_table_name : ${self:custom.dbTableName}
@@ -44,6 +48,23 @@ provider:
         - { Ref: "AWS::AccountId" }
         - ":table/"
         - ${self:custom.dbTableName}
+  - Effect: Allow
+    Action:
+    - lambda:InvokeFunction
+    Resource:
+      Fn::Join:
+      - ""
+      - - "arn:aws:lambda:"
+        - ${self:custom.awsRegion}
+        - ":"
+        - { Ref: "AWS::AccountId" }
+        - ":function:"
+        - ${self:service}  # begin name of function
+        - "-"
+        - ${self:provider.stage}
+        - "-"
+        - "query_logs"
+
 
 package:
   exclude:
@@ -55,14 +76,22 @@ package:
     - .gitignore
     - requirements.txt
     - test.json
+    - infra/**
+    - __pychache__/**
+    - .idea/**
+    - config.json
 
 functions:
   query_logs:
     handler: query_logs.query_to_db
-    timeout: 300
-    memorySize: 512
+    timeout: 240
+    memorySize: 2432
     layers:
       - arn:aws:lambda:${self:custom.awsRegion}:113088814899:layer:Klayers-python37-aiohttp:4
       - arn:aws:lambda:${self:custom.awsRegion}:113088814899:layer:Klayers-python37-pyOpenSSL:1
       - arn:aws:lambda:${self:custom.awsRegion}:113088814899:layer:Klayers-python37-tldextract:1
       - arn:aws:lambda:${self:custom.awsRegion}:113088814899:layer:Klayers-python37-construct:1
+  invoke_lambdas:
+    handler: invoke_lambdas.invoke_lambdas
+    timeout: 900
+    memorySize: 128
