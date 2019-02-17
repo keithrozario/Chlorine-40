@@ -13,10 +13,16 @@ import os
 import collections
 import tldextract
 import logging
+from botocore.exceptions import ClientError
 
 
 logger = logging.getLogger()
 logger.setLevel(logging.INFO)
+
+
+def chunks(l, chunk_length):
+    for i in range(0, len(l), chunk_length):
+        yield l[i:i+chunk_length]
 
 
 async def fetch(url, session):
@@ -79,7 +85,9 @@ def main(log_url, start_pos, end_pos, max_block_size=256):
                 chain = [crypto.load_certificate(crypto.FILETYPE_ASN1, cert_data_string)]
                 domains.extend(certlib.add_all_domains(certlib.dump_cert(chain[0])))
 
+    logger.info("Found {} domains".format(len(domains)))
     uni_domains = list(set(domains))
+    logger.info("Found {} unique domains".format(len(uni_domains)))
     return uni_domains
 
 
@@ -121,28 +129,46 @@ def query_to_db(event, context):
     for result in results:
         d[tldextract.extract(result).domain[:2]].append(result)
 
-    logger.info("Writing Data to DynamoDB")
-    # d is a list of list
-    with table.batch_writer() as batch:
-        for initials in d:
-            batch.put_item(Item={"initials": initials,
-                                 "start_pos": str(start_position),
-                                 "domains": json.dumps(d[initials])})
+    # logger.info("Writing Data to DynamoDB")
+    # # d is a list of list
+    # with table.batch_writer() as batch:
+    #     for initials in d:
+    #
+    #         domains_str = json.dumps(d[initials])
+    #         # if domains in string is more than 200,000 strong chance this will be to big for single item
+    #         if len(domains_str) < 200000:
+    #             try:
+    #                 batch.put_item(Item={"initials": initials,
+    #                                      "start_pos": str(start_position),
+    #                                      "domains": domains_str})
+    #             except ClientError as e:
+    #                 logger.info("Unexpected error near {}".format(start_position))
+    #         else:
+    #             logger.info("Processing {} domains {} long".format(len(d[initials]),
+    #                                                                len(domains_str)))
+    #             chunked_domains = chunks(d[initials], 4000)
+    #             for k, chunk in enumerate(chunked_domains):
+    #                 try:
+    #                     batch.put_item(Item={"initials": initials,
+    #                                          "start_pos": "{}-{}".format(start_position, k),
+    #                                          "domains": json.dumps(chunk)})
+    #                 except ClientError as e:
+    #                     logger.info("Unexpected error near {}-{}".format(start_position, k))
 
     return {'statusCode': 200}
 
 
 if __name__ == '__main__':
     start = time.time()
-    log_url = 'https://ct.googleapis.com/logs/argon2018'
+    log_url = 'https://ct.googleapis.com/logs/argon2019'
 
     event = dict()
     os.environ['db_table_name'] = 'cert-domains'
     os.environ['AWS_REGION'] = 'us-east-1'
     event['log_url'] = log_url
-    event['start_pos'] = 0
-    event['end_pos'] = 256
-    event['max_block_size'] = 64
+    event['start_pos'] = 5120 * 30
+    event['end_pos'] = 5120 * 40
+    event['max_block_size'] = 256
 
     query_to_db(event, {})
 
