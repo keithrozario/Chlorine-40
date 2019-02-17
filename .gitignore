@@ -18,3 +18,11 @@ var/
 
 # Serverless directories
 .serverless
+
+# infra
+infra/.terraform
+*.tfstate*
+
+# misc
+.idea/
+__pychache__/
