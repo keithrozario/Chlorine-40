@@ -129,31 +129,31 @@ def query_to_db(event, context):
     for result in results:
         d[tldextract.extract(result).domain[:2]].append(result)
 
-    # logger.info("Writing Data to DynamoDB")
-    # # d is a list of list
-    # with table.batch_writer() as batch:
-    #     for initials in d:
-    #
-    #         domains_str = json.dumps(d[initials])
-    #         # if domains in string is more than 200,000 strong chance this will be to big for single item
-    #         if len(domains_str) < 200000:
-    #             try:
-    #                 batch.put_item(Item={"initials": initials,
-    #                                      "start_pos": str(start_position),
-    #                                      "domains": domains_str})
-    #             except ClientError as e:
-    #                 logger.info("Unexpected error near {}".format(start_position))
-    #         else:
-    #             logger.info("Processing {} domains {} long".format(len(d[initials]),
-    #                                                                len(domains_str)))
-    #             chunked_domains = chunks(d[initials], 4000)
-    #             for k, chunk in enumerate(chunked_domains):
-    #                 try:
-    #                     batch.put_item(Item={"initials": initials,
-    #                                          "start_pos": "{}-{}".format(start_position, k),
-    #                                          "domains": json.dumps(chunk)})
-    #                 except ClientError as e:
-    #                     logger.info("Unexpected error near {}-{}".format(start_position, k))
+    logger.info("Writing Data to DynamoDB")
+    # d is a list of list
+    with table.batch_writer() as batch:
+        for initials in d:
+
+            domains_str = json.dumps(d[initials])
+            # if domains in string is more than 200,000 strong chance this will be to big for single item
+            if len(domains_str) < 200000:
+                try:
+                    batch.put_item(Item={"initials": initials,
+                                         "start_pos": str(start_position),
+                                         "domains": domains_str})
+                except ClientError as e:
+                    logger.info("Unexpected error near {}".format(start_position))
+            else:
+                logger.info("Processing {} domains {} long".format(len(d[initials]),
+                                                                   len(domains_str)))
+                chunked_domains = chunks(d[initials], 4000)
+                for k, chunk in enumerate(chunked_domains):
+                    try:
+                        batch.put_item(Item={"initials": initials,
+                                             "start_pos": "{}-{}".format(start_position, k),
+                                             "domains": json.dumps(chunk)})
+                    except ClientError as e:
+                        logger.info("Unexpected error near {}-{}".format(start_position, k))
 
     return {'statusCode': 200}
 
