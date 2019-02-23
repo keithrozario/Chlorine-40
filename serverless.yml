@@ -1,11 +1,14 @@
-
 service: cert-transparency
 
 custom:
-  awsRegion: ${file(config.json):aws_region}
-  bucketName: ${file(config.json):bucket_name}
-  dbTableName: ${file(config.json):dynamodb_table_name}
+  awsRegion: ${file(infra/config.json):aws_region}
+  bucketName: ${file(infra/config.json):bucket_name}
+  dbTableName: ${file(infra/config.json):dynamodb_table_name}
+  tldCacheFile: "/opt/python/tldextract/.tld_set_snapshot"  # this allows tldextract to use built-in snapshot
 
+plugins:
+  # Plugin to allow IAM role per function rather than per service
+  - serverless-iam-roles-per-function
 
 provider:
   name: aws
@@ -14,56 +17,77 @@ provider:
   region: ${self:custom.awsRegion}
   versionFunctions: false
   logRetentionInDays: 1
-  environment:
-    bucket_name: ${self:custom.bucketName}
-    db_table_name : ${self:custom.dbTableName}
-  iamRoleStatements:
-  - Effect: Allow
-    Action:
-    - s3:PutObject
-    - s3:GetObject
-    - s3:DeleteObject
-    - s3:PutObjectAcl
-    - s3:GetObjectAcl  # ACL permissions required for file_upload
-    - s3:AbortMultipartUpload
-    Resource:
-      Fn::Join:
-      - ""
-      - - "arn:aws:s3:::"
-        - ${self:custom.bucketName}
-        - "/*"
-  - Effect: Allow
-    Action:
-    - dynamodb:GetItem
-    - dynamodb:PutItem
-    - dynamodb:BatchGetItem
-    - dynamodb:Query
-    - dynamodb:BatchWriteItem
-    Resource:
-      Fn::Join:
-      - ""
-      - - "arn:aws:dynamodb:"
-        - ${self:custom.awsRegion}
-        - ":"
-        - { Ref: "AWS::AccountId" }
-        - ":table/"
-        - ${self:custom.dbTableName}
-  - Effect: Allow
-    Action:
-    - lambda:InvokeFunction
-    Resource:
-      Fn::Join:
-      - ""
-      - - "arn:aws:lambda:"
-        - ${self:custom.awsRegion}
-        - ":"
-        - { Ref: "AWS::AccountId" }
-        - ":function:"
-        - ${self:service}  # begin name of function
-        - "-"
-        - ${self:provider.stage}
-        - "-"
-        - "query_logs"
+
+functions:
+  query_logs:
+    handler: query_logs.query_to_db
+    timeout: 240
+    memorySize: 2048
+    layers:
+      - arn:aws:lambda:${self:custom.awsRegion}:113088814899:layer:Klayers-python37-aiohttp:4
+      - arn:aws:lambda:${self:custom.awsRegion}:113088814899:layer:Klayers-python37-pyOpenSSL:1
+      - arn:aws:lambda:${self:custom.awsRegion}:113088814899:layer:Klayers-python37-tldextract:1
+      - arn:aws:lambda:${self:custom.awsRegion}:113088814899:layer:Klayers-python37-construct:1
+    environment:
+      bucket_name: ${self:custom.bucketName}
+      db_table_name: ${self:custom.dbTableName}
+      TLDEXTRACT_CACHE: ${self:custom.tldCacheFile}
+    iamRoleStatements:
+    - Effect: Allow
+      Action:
+      - dynamodb:PutItem
+      - dynamodb:BatchWriteItem
+      Resource:
+        Fn::Join:
+        - ""
+        - - "arn:aws:dynamodb:"
+          - ${self:custom.awsRegion}
+          - ":"
+          - { Ref: "AWS::AccountId" }
+          - ":table/"
+          - ${self:custom.dbTableName}
+  ### Invoke Lambda ###
+  invoke_lambdas:
+    handler: invoke_lambdas.invoke_lambdas
+    timeout: 900
+    memorySize: 128
+    iamRoleStatements:
+    - Effect: Allow
+      Action:
+      - lambda:InvokeFunction
+      Resource:
+        Fn::Join:
+        - ""
+        - - "arn:aws:lambda:"
+          - ${self:custom.awsRegion}
+          - ":"
+          - { Ref: "AWS::AccountId" }
+          - ":function:"
+          - ${self:service}  # begin name of function
+          - "-"
+          - ${self:provider.stage}
+          - "-"
+          - "query_logs"
+  ### Query DB #####
+  query_db:
+    handler: query_db.main
+    timeout: 9
+    memorySize: 128
+    iamRoleStatements:
+    - Effect: Allow
+      Action:
+      - s3:PutObject
+      - s3:GetObject
+      - s3:DeleteObject
+      - s3:PutObjectAcl
+      - s3:GetObjectAcl  # ACL permissions required for file_upload
+      - s3:AbortMultipartUpload
+      Resource:
+        Fn::Join:
+        - ""
+        - - "arn:aws:s3:::"
+          - ${self:custom.bucketName}
+          - "/*"
 
 
 package:
@@ -80,18 +104,3 @@ package:
     - __pychache__/**
     - .idea/**
     - config.json
-
-functions:
-  query_logs:
-    handler: query_logs.query_to_db
-    timeout: 240
-    memorySize: 2432
-    layers:
-      - arn:aws:lambda:${self:custom.awsRegion}:113088814899:layer:Klayers-python37-aiohttp:4
-      - arn:aws:lambda:${self:custom.awsRegion}:113088814899:layer:Klayers-python37-pyOpenSSL:1
-      - arn:aws:lambda:${self:custom.awsRegion}:113088814899:layer:Klayers-python37-tldextract:1
-      - arn:aws:lambda:${self:custom.awsRegion}:113088814899:layer:Klayers-python37-construct:1
-  invoke_lambdas:
-    handler: invoke_lambdas.invoke_lambdas
-    timeout: 900
-    memorySize: 128

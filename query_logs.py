@@ -20,7 +20,7 @@ logger = logging.getLogger()
 logger.setLevel(logging.INFO)
 
 
-def chunks(l, chunk_length):
+def chunk_list(l, chunk_length):
     for i in range(0, len(l), chunk_length):
         yield l[i:i+chunk_length]
 
@@ -66,13 +66,13 @@ async def run(url, start, end, max_block_size=256):
     return responses
 
 
-def main(log_url, start_pos, end_pos, max_block_size=256):
+def query_api(log_url, start_pos, end_pos, max_block_size=256):
 
     loop = asyncio.get_event_loop()
     future = asyncio.ensure_future(run(log_url, start_pos, end_pos, max_block_size))
     responses = loop.run_until_complete(future)
 
-    domains = []
+    fqdns = []
 
     for response in responses:
         decoded_response = json.loads(response.decode('utf-8'))
@@ -83,23 +83,34 @@ def main(log_url, start_pos, end_pos, max_block_size=256):
                 # We have a normal x509 entry
                 cert_data_string = certlib.Certificate.parse(leaf_cert.Entry).CertData
                 chain = [crypto.load_certificate(crypto.FILETYPE_ASN1, cert_data_string)]
-                domains.extend(certlib.add_all_domains(certlib.dump_cert(chain[0])))
+                fqdns.extend(certlib.add_all_domains(certlib.dump_cert(chain[0])))
 
-    logger.info("Found {} domains".format(len(domains)))
+    logger.info("Found {} fqdns".format(len(fqdns)))
+
+    uni_fqdns = list(set(fqdns))
+    logger.info("Found {} unique fqdns".format(len(uni_fqdns)))
+
+    domains = map(lambda k: tldextract.extract(k).registered_domain, uni_fqdns)
     uni_domains = list(set(domains))
     logger.info("Found {} unique domains".format(len(uni_domains)))
-    return uni_domains
+
+    # group all domains starting with the same 2 letters
+    d = collections.defaultdict(list)
+    for domain in uni_domains:
+        d[domain[:2]].append(domain)
+
+    return d
 
 
-def query_logs(event, context):
+def query_to_s3(event, context):
     log_url = event['log_url']
     max_block_size = event.get('max_block_size', 256)
     start_position = event.get('start_pos', 0)
     end_position = event.get('end_pos')
-    results = main(log_url=log_url,
-                   start_pos=start_position,
-                   end_pos=end_position,
-                   max_block_size=max_block_size)
+    results = query_api(log_url=log_url,
+                        start_pos=start_position,
+                        end_pos=end_position,
+                        max_block_size=max_block_size)
 
     file_obj = io.BytesIO(json.dumps(results).encode('utf-8'))
     s3_client = boto3.client('s3')
@@ -110,50 +121,66 @@ def query_logs(event, context):
 
 
 def query_to_db(event, context):
+
+    """
+    Queries the cert log @ log_url, from start_pos to end_pos in blocks of max_block_size
+    writes out results to a DynamoDB table (name in os.environ['table_name']
+    each item in table is a list of domains group by first two initials
+    """
+
     log_url = event['log_url']
     max_block_size = event.get('max_block_size', 256)
     start_position = event.get('start_pos', 0)
     end_position = event.get('end_pos')
-    results = main(log_url=log_url,
-                   start_pos=start_position,
-                   end_pos=end_position,
-                   max_block_size=max_block_size)
 
-    logger.info("{} unique domains retrieved".format(len(results)))
+    table_name = os.environ['db_table_name']
+
+    results = query_api(log_url=log_url,
+                        start_pos=start_position,
+                        end_pos=end_position,
+                        max_block_size=max_block_size)
+
     dynamodb = boto3.resource('dynamodb', region_name=os.environ['AWS_REGION'])
-    table = dynamodb.Table(os.environ['db_table_name'])
-
-    logger.info("Sorting List by domain")
-    # create a list of all domains starting with the same 2 letters
-    d = collections.defaultdict(list)
-    for result in results:
-        d[tldextract.extract(result).domain[:2]].append(result)
+    table = dynamodb.Table(table_name)
+    ttl = int(time.time()) + (3600 * 24)  # set  time to live of record to 24 hours
 
     logger.info("Writing Data to DynamoDB")
+
     # d is a list of list
     with table.batch_writer() as batch:
-        for initials in d:
+        for initials in results:
 
-            domains_str = json.dumps(d[initials])
-            # if domains in string is more than 200,000 strong chance this will be to big for single item
-            if len(domains_str) < 200000:
-                try:
-                    batch.put_item(Item={"initials": initials,
-                                         "start_pos": str(start_position),
-                                         "domains": domains_str})
-                except ClientError as e:
-                    logger.info("Unexpected error near {}".format(start_position))
+            domains_str = json.dumps(results[initials])
+            items = []
+
+            # Check for empty string
+            if not domains_str:
+                continue
+            # Check if domain string can fit into a single DynamoDB item
+            elif len(domains_str) < 200000:
+                items.append({"initials": initials,
+                              "start_pos": "{:010}".format(start_position),
+                              "domains": domains_str})
+            # 'chunk' domains into multiple items if too big
             else:
-                logger.info("Processing {} domains {} long".format(len(d[initials]),
-                                                                   len(domains_str)))
-                chunked_domains = chunks(d[initials], 4000)
-                for k, chunk in enumerate(chunked_domains):
-                    try:
-                        batch.put_item(Item={"initials": initials,
-                                             "start_pos": "{}-{}".format(start_position, k),
-                                             "domains": json.dumps(chunk)})
-                    except ClientError as e:
-                        logger.info("Unexpected error near {}-{}".format(start_position, k))
+                logger.info("Chunking {} domains {} long".format(len(results[initials]),
+                                                                 len(domains_str)))
+                chunks = chunk_list(results[initials], 4000)
+                for k, chunk in enumerate(chunks):
+                    items.append({"initials": initials,
+                                  "start_pos": "{:010}-{}".format(start_position, k),
+                                  "domains": json.dumps(chunk)})
+
+            # write out items list to dynamoDB
+            for item in items:
+                item['TTL'] = ttl
+                try:
+                    batch.put_item(Item=item)
+                except ClientError as e:
+                    if e.response['Error']['Code'] == 'ValidationException':
+                        logger.info("Validation Exception near insertion of '{}'".format(initials))
+                    else:
+                        logger.info("Unexpected error near insertion of '{}' ".format(initials))
 
     return {'statusCode': 200}
 
@@ -166,8 +193,8 @@ if __name__ == '__main__':
     os.environ['db_table_name'] = 'cert-domains'
     os.environ['AWS_REGION'] = 'us-east-1'
     event['log_url'] = log_url
-    event['start_pos'] = 5120 * 30
-    event['end_pos'] = 5120 * 40
+    event['start_pos'] = 5120 * 40
+    event['end_pos'] = 5120 * 41
     event['max_block_size'] = 256
 
     query_to_db(event, {})

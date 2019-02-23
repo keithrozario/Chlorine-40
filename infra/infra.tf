@@ -25,6 +25,11 @@ resource "aws_dynamodb_table" "dynamodb-table" {
     type = "S"
   }
 
+  ttl {
+    attribute_name = "TTL"
+    enabled        = true
+  }
+
 }
 
 # S3 Bucket
