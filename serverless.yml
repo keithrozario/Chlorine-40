@@ -4,6 +4,7 @@ custom:
   awsRegion: ${file(infra/config.json):aws_region}
   bucketName: ${file(infra/config.json):bucket_name}
   dbTableName: ${file(infra/config.json):dynamodb_table_name}
+  query_que_arn: ${file(infra/config.json):query_queue_arn}
   tldCacheFile: "/opt/python/tldextract/.tld_set_snapshot"  # this allows tldextract to use built-in snapshot
 
 plugins:
@@ -46,33 +47,25 @@ functions:
           - { Ref: "AWS::AccountId" }
           - ":table/"
           - ${self:custom.dbTableName}
-  ### Invoke Lambda ###
-  invoke_lambdas:
-    handler: invoke_lambdas.invoke_lambdas
-    timeout: 900
-    memorySize: 128
-    iamRoleStatements:
     - Effect: Allow
       Action:
-      - lambda:InvokeFunction
-      Resource:
-        Fn::Join:
-        - ""
-        - - "arn:aws:lambda:"
-          - ${self:custom.awsRegion}
-          - ":"
-          - { Ref: "AWS::AccountId" }
-          - ":function:"
-          - ${self:service}  # begin name of function
-          - "-"
-          - ${self:provider.stage}
-          - "-"
-          - "query_logs"
+      - sqs:ReceiveMessage
+      - sqs:DeleteMessage
+      - sqs:GetQueueAttributes
+      Resource: ${self:custom.query_que_arn}
+    events:
+    - sqs:
+        arn: ${self:custom.query_que_arn}
+        batchSize: 1
+    reservedConcurrency: 10
   ### Query DB #####
   query_db:
     handler: query_db.main
     timeout: 9
     memorySize: 128
+    environment:
+      bucket_name: ${self:custom.bucketName}
+      db_table_name: ${self:custom.dbTableName}
     iamRoleStatements:
     - Effect: Allow
       Action:
@@ -88,7 +81,20 @@ functions:
         - - "arn:aws:s3:::"
           - ${self:custom.bucketName}
           - "/*"
-
+    - Effect: Allow
+      Action:
+      - dynamodb:Query
+      - dynamodb:BatchGetItem
+      - dynamodb:Scan
+      Resource:
+        Fn::Join:
+        - ""
+        - - "arn:aws:dynamodb:"
+          - ${self:custom.awsRegion}
+          - ":"
+          - { Ref: "AWS::AccountId" }
+          - ":table/"
+          - ${self:custom.dbTableName}
 
 package:
   exclude:
@@ -104,3 +110,4 @@ package:
     - __pychache__/**
     - .idea/**
     - config.json
+    - client/**

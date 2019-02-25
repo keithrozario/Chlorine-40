@@ -8,7 +8,6 @@ import json
 import math
 import time
 import boto3
-import io
 import os
 import collections
 import tldextract
@@ -75,7 +74,14 @@ def query_api(log_url, start_pos, end_pos, max_block_size=256):
     fqdns = []
 
     for response in responses:
-        decoded_response = json.loads(response.decode('utf-8'))
+
+        try:
+            decoded_response = json.loads(response.decode('utf-8'))
+        except json.decoder.JSONDecodeError as e:
+            logger.info("Unable to decode response:")
+            logger.info(response)
+            return []
+
         for entry in decoded_response['entries']:
             leaf_cert = certlib.MerkleTreeHeader.parse(base64.b64decode(entry['leaf_input']))
 
@@ -102,24 +108,6 @@ def query_api(log_url, start_pos, end_pos, max_block_size=256):
     return d
 
 
-def query_to_s3(event, context):
-    log_url = event['log_url']
-    max_block_size = event.get('max_block_size', 256)
-    start_position = event.get('start_pos', 0)
-    end_position = event.get('end_pos')
-    results = query_api(log_url=log_url,
-                        start_pos=start_position,
-                        end_pos=end_position,
-                        max_block_size=max_block_size)
-
-    file_obj = io.BytesIO(json.dumps(results).encode('utf-8'))
-    s3_client = boto3.client('s3')
-    file_name = "{}.{}".format(end_position, 'txt')
-
-    s3_client.upload_fileobj(file_obj, os.environ['bucket_name'], file_name)  # bucket name in env var
-    return {"body": "done"}
-
-
 def query_to_db(event, context):
 
     """
@@ -128,22 +116,31 @@ def query_to_db(event, context):
     each item in table is a list of domains group by first two initials
     """
 
-    log_url = event['log_url']
-    max_block_size = event.get('max_block_size', 256)
-    start_position = event.get('start_pos', 0)
-    end_position = event.get('end_pos')
+    # retrieve que message
+    message = json.loads(event['Records'][0]['body'])
+    try:
+        log_url = message['log_url']
+        start_position = message['start_pos']
+        end_position = message['end_pos']
+    except KeyError:
+        logger.info("Missing argument in que message")
+        logger.info("Message dump: {}".format(json.dumps(message)))
+        return {'status': 500}  # return 'successfully' to SQS to prevent retry
 
-    table_name = os.environ['db_table_name']
-
+    # get data from cert logs api
     results = query_api(log_url=log_url,
                         start_pos=start_position,
                         end_pos=end_position,
-                        max_block_size=max_block_size)
+                        max_block_size=256)
 
+    if not results:  # empty list
+        return {'statusCode': 500}
+
+    # setup DynamoDB
+    table_name = os.environ['db_table_name']
     dynamodb = boto3.resource('dynamodb', region_name=os.environ['AWS_REGION'])
     table = dynamodb.Table(table_name)
     ttl = int(time.time()) + (3600 * 24)  # set  time to live of record to 24 hours
-
     logger.info("Writing Data to DynamoDB")
 
     # d is a list of list

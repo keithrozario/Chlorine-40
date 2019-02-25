@@ -1,10 +1,11 @@
 import json
 import boto3
-import os
 import time
 from botocore.exceptions import ClientError
+import logging
 
-configuration_file = 'lambda/serverless.yml'
+logger = logging.getLogger('__main__')
+
 
 def get_config():
 
@@ -34,52 +35,53 @@ def calc_concurrency(num_payloads):
         return num_payloads
 
 
-def get_log_events(client, function_name, start_time):
+def get_log_events(region, function_name, start_time):
 
     """
-    Returns the number of events that match a filter patter for the log_group from start_time till now
-
+    Uses cloudwatch insights to determine the number of lambdas that have Ended within a given timeframe
     """
+    query = 'stats count(*) | filter @message like "END RequestId:"'
+    client = boto3.client('logs', region_name=region)
 
-    payload = {'function_name': function_name, 'start_time': start_time}
+    # start the query
+    query_response = client.start_query(
+        logGroupName='/aws/lambda/{}'.format(function_name),
+        startTime=start_time,
+        endTime=start_time + 3600 * 24 * 1000,  # arbitrarily set end time to an hour from start, *1000 for milliseconds
+        queryString=query,
+        limit=2
+    )
 
-    response = client.invoke(FunctionName='potassium40-functions-check_lambda',
-                             InvocationType='RequestResponse',
-                             Payload=json.dumps(payload))
+    response = {'status': None}
+    while response['status'] not in ['Complete', 'Failed', 'Cancelled']:
+        response = client.get_query_results(queryId=query_response['queryId'])
 
+    # return results
     try:
-        result = json.loads(response['Payload'].read())
-        lambda_count = json.loads(result['results'])
-        ended = lambda_count['END RequestId']
-    except KeyError:
-        ended = 0
-
-    return ended
+        lambdas_ended = int(response['results'][0][0]['value'])
+    except (IndexError, KeyError):
+        print("No Lambdas found to be completing, waiting 20 seconds before next poll")
+        lambdas_ended = 0
+        time.sleep(20)
+    return lambdas_ended
 
 
 def check_lambdas(function_name, num_invocations, start_time, region_name=False, sleep_time=3):
 
-    print("Checking Lambdas in {}".format(region_name))
+    logger.info("Checking Lambdas in {}".format(region_name))
     num_lambdas_ended = 0
-
-    # if no region specified use region
-    if not region_name:
-        config = get_config()
-        region_name = config['custom']['aws_region']
-
-    client = boto3.client('lambda', region_name=region_name)
 
     while True:
         time.sleep(sleep_time)
         if num_lambdas_ended >= num_invocations:
-            print('All lambdas ended!')
+            logger.info('All lambdas ended!')
             break
         else:
-            num_lambdas_ended = get_log_events(client=client,
+            num_lambdas_ended = get_log_events(region=region_name,
                                                function_name=function_name,
                                                start_time=start_time)
         # Print Results
-        print("{} Lambdas Invoked, {} Lambdas completed".format(num_invocations,
+        logger.info("{} Lambdas Invoked, {} Lambdas completed".format(num_invocations,
                                                                 num_lambdas_ended))
     return True
 
@@ -98,7 +100,7 @@ def async_in_region(invoking_function, invoked_function, payloads, region_name=F
     :return:
     """
 
-    per_lambda_invocation = 50   # each lambda will invoke 50 payloads
+    per_lambda_invocation = 5   # each lambda will invoke 50 payloads
 
     # if no region specified use region
     if not region_name:
@@ -139,6 +141,8 @@ def async_in_region(invoking_function, invoked_function, payloads, region_name=F
         time.sleep(sleep_time)  # don't invoke all at once
 
     print("\nINFO: {} Lambdas invoked, checking status\n".format(len(payloads)))
+    print("Waiting 2 minutes before querying Cloudwatch")
+    time.sleep(120)
     check_lambdas(function_name=invoked_function,
                   num_invocations=len(payloads),
                   start_time=start_time,
@@ -147,7 +151,7 @@ def async_in_region(invoking_function, invoked_function, payloads, region_name=F
 
     try:
         lambda_client.delete_function_concurrency(FunctionName=invoked_function)
-        print("Reserved Concurrency for {} removed".format(invoked_function)
+        print("Reserved Concurrency for {} removed".format(invoked_function))
     except ClientError:
         pass  # no concurrency set
 

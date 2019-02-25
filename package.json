@@ -1,0 +1,22 @@
+{
+  "name": "cert_transparency",
+  "version": "1.0.0",
+  "description": "Cert Transparency log",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/keithrozario/cert_transparency.git"
+  },
+  "author": "",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/keithrozario/cert_transparency/issues"
+  },
+  "homepage": "https://github.com/keithrozario/cert_transparency#readme",
+  "devDependencies": {
+    "serverless-iam-roles-per-function": "^1.0.4"
+  }
+}
