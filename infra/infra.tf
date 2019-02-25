@@ -27,16 +27,36 @@ resource "aws_dynamodb_table" "dynamodb-table" {
 
   ttl {
     attribute_name = "TTL"
-    enabled        = true
+    enabled = true
   }
 
 }
+
+
+resource "aws_sqs_queue" "sqs-dead-letter" {
+  name                      = "sqs-dead-letter"
+  delay_seconds             = 0
+  visibility_timeout_seconds = 30
+  max_message_size          = 2048
+  message_retention_seconds = 86400
+  receive_wait_time_seconds = 10
+}
+
+resource "aws_sqs_queue" "query-logs" {
+  name                      = "query-logs"
+  delay_seconds             = 0
+  max_message_size          = 4096
+  message_retention_seconds = 3600
+  visibility_timeout_seconds = 1800
+  redrive_policy            = "{\"deadLetterTargetArn\":\"${aws_sqs_queue.sqs-dead-letter.arn}\",\"maxReceiveCount\":5}"
+
+}
+
 
 # S3 Bucket
 resource "aws_s3_bucket" "bucket" {
   bucket = "cert-domains"
   acl    = "private"
-
 }
 
 # Outputs for serverless to consum
@@ -51,4 +71,12 @@ output "dynamodb_table_name" {
 
 output "aws_region" {
   value = "${var.region}"
+}
+
+output "query_queue_arn" {
+  value = "${aws_sqs_queue.query-logs.arn}"
+}
+
+output "query_queue_url" {
+  value = "${aws_sqs_queue.query-logs.id}"
 }
