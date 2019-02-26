@@ -32,8 +32,8 @@ if __name__ == '__main__':
 
     function_name = 'cert-transparency-dev-query_logs'
     certs_per_invoke = 1024 * 128
-    invocations = 200
-    start = 0
+    invocations = 50
+    start = 310 * 1024 * 128
 
     client = boto3.client('sqs', region_name='us-east-1')
     max_batch_size = 10
@@ -50,8 +50,10 @@ if __name__ == '__main__':
     for k in range(0, len(message_batch), max_batch_size):
         response = client.send_message_batch(QueueUrl=que_url,
                                              Entries=message_batch[k:k+max_batch_size])
-        logger.info("{} successful, {} failed".format(len(response.get('Successful',  [])),
-                                                      len(response.get('Failed', []))))
+
+        if len(response.get('Successful',  [])) == max_batch_size:
+            logger.info("{} successful, {} total messages sent".format(len(response.get('Successful',  [])),
+                                                                       k))
 
     while True:
         time.sleep(10)

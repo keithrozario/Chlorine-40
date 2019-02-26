@@ -5,6 +5,7 @@ custom:
   bucketName: ${file(infra/config.json):bucket_name}
   dbTableName: ${file(infra/config.json):dynamodb_table_name}
   query_que_arn: ${file(infra/config.json):query_queue_arn}
+  db_read_queue_arn: ${file(infra/config.json):db_read_queue_arn}
   tldCacheFile: "/opt/python/tldextract/.tld_set_snapshot"  # this allows tldextract to use built-in snapshot
 
 plugins:
@@ -95,6 +96,17 @@ functions:
           - { Ref: "AWS::AccountId" }
           - ":table/"
           - ${self:custom.dbTableName}
+    - Effect: Allow
+      Action:
+      - sqs:ReceiveMessage
+      - sqs:DeleteMessage
+      - sqs:GetQueueAttributes
+      Resource: ${self:custom.db_read_queue_arn}
+    events:
+    - sqs:
+        arn: ${self:custom.db_read_queue_arn}
+        batchSize: 1
+    reservedConcurrency: 30
 
 package:
   exclude:

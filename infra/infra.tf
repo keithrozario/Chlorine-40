@@ -33,8 +33,17 @@ resource "aws_dynamodb_table" "dynamodb-table" {
 }
 
 
-resource "aws_sqs_queue" "sqs-dead-letter" {
-  name                      = "sqs-dead-letter"
+resource "aws_sqs_queue" "logs-dead-letter" {
+  name                      = "logs-dead-letter"
+  delay_seconds             = 0
+  visibility_timeout_seconds = 30
+  max_message_size          = 2048
+  message_retention_seconds = 86400
+  receive_wait_time_seconds = 10
+}
+
+resource "aws_sqs_queue" "db-read-dead-letter" {
+  name                      = "db-read-dead-letter"
   delay_seconds             = 0
   visibility_timeout_seconds = 30
   max_message_size          = 2048
@@ -48,7 +57,17 @@ resource "aws_sqs_queue" "query-logs" {
   max_message_size          = 4096
   message_retention_seconds = 3600
   visibility_timeout_seconds = 1800
-  redrive_policy            = "{\"deadLetterTargetArn\":\"${aws_sqs_queue.sqs-dead-letter.arn}\",\"maxReceiveCount\":5}"
+  redrive_policy            = "{\"deadLetterTargetArn\":\"${aws_sqs_queue.logs-dead-letter.arn}\",\"maxReceiveCount\":5}"
+
+}
+
+resource "aws_sqs_queue" "db-read" {
+  name                      = "db-read"
+  delay_seconds             = 0
+  max_message_size          = 4096
+  message_retention_seconds = 3600
+  visibility_timeout_seconds = 1800
+  redrive_policy            = "{\"deadLetterTargetArn\":\"${aws_sqs_queue.db-read-dead-letter.arn}\",\"maxReceiveCount\":5}"
 
 }
 
@@ -79,4 +98,12 @@ output "query_queue_arn" {
 
 output "query_queue_url" {
   value = "${aws_sqs_queue.query-logs.id}"
+}
+
+output "db_read_queue_arn" {
+  value = "${aws_sqs_queue.db-read.arn}"
+}
+
+output "db_read_queue_url" {
+  value = "${aws_sqs_queue.db-read.id}"
 }
