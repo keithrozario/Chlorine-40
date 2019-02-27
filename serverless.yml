@@ -1,13 +1,5 @@
 service: cert-transparency
 
-custom:
-  awsRegion: ${file(infra/config.json):aws_region}
-  bucketName: ${file(infra/config.json):bucket_name}
-  dbTableName: ${file(infra/config.json):dynamodb_table_name}
-  query_que_arn: ${file(infra/config.json):query_queue_arn}
-  db_read_queue_arn: ${file(infra/config.json):db_read_queue_arn}
-  tldCacheFile: "/opt/python/tldextract/.tld_set_snapshot"  # this allows tldextract to use built-in snapshot
-
 plugins:
   # Plugin to allow IAM role per function rather than per service
   - serverless-iam-roles-per-function
@@ -15,10 +7,20 @@ plugins:
 provider:
   name: aws
   runtime: python3.7
-  stage: ${opt:stage, 'dev'}
-  region: ${self:custom.awsRegion}
+  stage: ${opt:stage, 'default'}
+  region: ${file(infra/terraform.tfvars.json):aws_region.${self:provider.stage}}
   versionFunctions: false
   logRetentionInDays: 1
+
+custom:
+  awsRegion: ${self:provider.region}
+
+  bucketName: ${ssm:/${self:service.name}/${self:provider.stage}/s3bucket_domains}
+  dbTableName: ${ssm:/${self:service.name}/${self:provider.stage}/dynamodb_temp}
+  query_que_arn: ${ssm:/${self:service.name}/${self:provider.stage}/sqs_query_logs_arn}
+  db_read_queue_arn: ${ssm:/${self:service.name}/${self:provider.stage}/sqs_query_db_arn}
+
+  tldCacheFile: "/opt/python/tldextract/.tld_set_snapshot"  # this allows tldextract to use built-in snapshot
 
 functions:
   query_logs:
@@ -62,8 +64,8 @@ functions:
   ### Query DB #####
   query_db:
     handler: query_db.main
-    timeout: 9
-    memorySize: 128
+    timeout: 30
+    memorySize: 256
     environment:
       bucket_name: ${self:custom.bucketName}
       db_table_name: ${self:custom.dbTableName}
