@@ -32,8 +32,8 @@ if __name__ == '__main__':
 
     function_name = 'cert-transparency-dev-query_logs'
     certs_per_invoke = 1024 * 128
-    invocations = 50
-    start = 310 * 1024 * 128
+    invocations = 140
+    start = 360 * 1024 * 128
 
     client = boto3.client('sqs', region_name='us-east-1')
     max_batch_size = 10
