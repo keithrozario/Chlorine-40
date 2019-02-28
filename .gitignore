@@ -27,3 +27,4 @@ infra/.terraform
 # misc
 .idea/
 __pychache__/
+scan.log

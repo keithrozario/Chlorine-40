@@ -98,7 +98,7 @@ resource "aws_ssm_parameter" "ssm_dynamodb_temp_table_arn" {
   type  = "String"
   description = "Name of DynamoDB Table"
   name  = "/${var.app_name}/${terraform.workspace}/dynamodb_temp_table_arn"
-  value = "${aws_dynamodb_table.dynamodb_temp.id}"
+  value = "${aws_dynamodb_table.dynamodb_temp.arn}"
   overwrite = true
 }
 

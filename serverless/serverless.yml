@@ -1,0 +1,108 @@
+service: cert-transparency
+
+plugins:
+  # Plugin to allow IAM role per function rather than per service
+  - serverless-iam-roles-per-function
+
+provider:
+  name: aws
+  runtime: python3.7
+  stage: ${opt:stage, 'default'}
+  region: ${file(../infra/terraform.tfvars.json):aws_region.${self:provider.stage}}
+  versionFunctions: false
+  logRetentionInDays: 1
+
+custom:
+  awsRegion: ${self:provider.region}
+
+  # environment variables
+  bucketName: ${ssm:/${self:service.name}/${self:provider.stage}/s3bucket_domains}
+  bucketArn: ${ssm:/${self:service.name}/${self:provider.stage}/s3bucket_domains_arn}
+  dbTableName: ${ssm:/${self:service.name}/${self:provider.stage}/dynamodb_temp_table}
+  dbTableArn: ${ssm:/${self:service.name}/${self:provider.stage}/dynamodb_temp_table_arn}
+  queryLogsArn: ${ssm:/${self:service.name}/${self:provider.stage}/sqs_query_logs_arn}
+  queryDbArn: ${ssm:/${self:service.name}/${self:provider.stage}/sqs_query_db_arn}
+
+  tldCacheFile: "/opt/python/tldextract/.tld_set_snapshot"  # this allows tldextract to use built-in snapshot
+
+functions:
+  query_logs:
+    handler: query_logs.query_to_db
+    timeout: 240
+    memorySize: 2048
+    layers:
+      - arn:aws:lambda:${self:custom.awsRegion}:113088814899:layer:Klayers-python37-aiohttp:4
+      - arn:aws:lambda:${self:custom.awsRegion}:113088814899:layer:Klayers-python37-pyOpenSSL:1
+      - arn:aws:lambda:${self:custom.awsRegion}:113088814899:layer:Klayers-python37-tldextract:1
+      - arn:aws:lambda:${self:custom.awsRegion}:113088814899:layer:Klayers-python37-construct:1
+    environment:
+      bucket_name: ${self:custom.bucketName}
+      db_table_name: ${self:custom.dbTableName}
+      TLDEXTRACT_CACHE: ${self:custom.tldCacheFile}
+    iamRoleStatements:
+    - Effect: Allow
+      Action:
+      - dynamodb:PutItem
+      - dynamodb:BatchWriteItem
+      Resource: ${self:custom.dbTableArn}
+    - Effect: Allow
+      Action:
+      - sqs:ReceiveMessage
+      - sqs:DeleteMessage
+      - sqs:GetQueueAttributes
+      Resource: ${self:custom.queryLogsArn}
+    events:
+    - sqs:
+        arn: ${self:custom.queryLogsArn}
+        batchSize: 1
+    reservedConcurrency: 10
+  ### Query DB #####
+  query_db:
+    handler: query_db.main
+    timeout: 30
+    memorySize: 256
+    environment:
+      bucket_name: ${self:custom.bucketName}
+      db_table_name: ${self:custom.dbTableName}
+    iamRoleStatements:
+    - Effect: Allow
+      Action:
+      - s3:PutObject
+      - s3:GetObject
+      - s3:DeleteObject
+      - s3:PutObjectAcl
+      - s3:GetObjectAcl
+      - s3:AbortMultipartUpload
+      Resource: ${self:custom.bucketArn}/*
+    - Effect: Allow
+      Action:
+      - dynamodb:Query
+      - dynamodb:BatchGetItem
+      - dynamodb:Scan
+      Resource: ${self:custom.dbTableArn}
+    - Effect: Allow
+      Action:
+      - sqs:ReceiveMessage
+      - sqs:DeleteMessage
+      - sqs:GetQueueAttributes
+      Resource: ${self:custom.queryDbArn}
+    events:
+    - sqs:
+        arn: ${self:custom.queryDbArn}
+        batchSize: 1
+    reservedConcurrency: 30
+
+# don't package these files
+package:
+  exclude:
+    - node_modules/**
+    - .serverless/**
+    - venv/**
+    - client/**
+    - infra/**
+    - __pychache__/**
+    - .idea/**
+    - package.json
+    - package-lock.json
+    - .gitignore
+    - requirements.txt
