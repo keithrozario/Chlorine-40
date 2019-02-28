@@ -86,11 +86,19 @@ resource "aws_s3_bucket" "s3bucket_domains" {
 
 
 # Outputs for serverless to consume
-resource "aws_ssm_parameter" "ssm_dynamodb_temp" {
+resource "aws_ssm_parameter" "ssm_dynamodb_temp_table" {
   type  = "String"
   description = "Name of DynamoDB Table"
-  name  = "/${var.app_name}/${terraform.workspace}/dynamodb_temp"
+  name  = "/${var.app_name}/${terraform.workspace}/dynamodb_temp_table"
   value = "${aws_dynamodb_table.dynamodb_temp.name}"
+  overwrite = true
+}
+
+resource "aws_ssm_parameter" "ssm_dynamodb_temp_table_arn" {
+  type  = "String"
+  description = "Name of DynamoDB Table"
+  name  = "/${var.app_name}/${terraform.workspace}/dynamodb_temp_table_arn"
+  value = "${aws_dynamodb_table.dynamodb_temp.id}"
   overwrite = true
 }
 
@@ -130,6 +138,13 @@ resource "aws_ssm_parameter" "ssm_s3bucket_domains" {
   type  = "String"
   name  = "/${var.app_name}/${terraform.workspace}/s3bucket_domains"
   value = "${aws_s3_bucket.s3bucket_domains.bucket}"
+  overwrite = true
+}
+
+resource "aws_ssm_parameter" "ssm_s3bucket_domains_arn" {
+  type  = "String"
+  name  = "/${var.app_name}/${terraform.workspace}/s3bucket_domains_arn"
+  value = "${aws_s3_bucket.s3bucket_domains.arn}"
   overwrite = true
 }
 
