@@ -16,17 +16,21 @@ custom:
   awsRegion: ${self:provider.region}
 
   # environment variables
-  bucketName: ${ssm:/${self:service.name}/${self:provider.stage}/s3bucket_domains}
-  bucketArn: ${ssm:/${self:service.name}/${self:provider.stage}/s3bucket_domains_arn}
-  dbTableName: ${ssm:/${self:service.name}/${self:provider.stage}/dynamodb_temp_table}
-  dbTableArn: ${ssm:/${self:service.name}/${self:provider.stage}/dynamodb_temp_table_arn}
-  queryLogsArn: ${ssm:/${self:service.name}/${self:provider.stage}/sqs_query_logs_arn}
-  queryDbArn: ${ssm:/${self:service.name}/${self:provider.stage}/sqs_query_db_arn}
-
-  tldCacheFile: "/opt/python/tldextract/.tld_set_snapshot"  # this allows tldextract to use built-in snapshot
+  s3DomainsName: ${ssm:/${self:service.name}/${self:provider.stage}/s3bucket_domains}
+  s3DomainsArn: ${ssm:/${self:service.name}/${self:provider.stage}/s3bucket_domains_arn}
+  dbTempName: ${ssm:/${self:service.name}/${self:provider.stage}/dynamodb_temp_table}
+  dbTempArn: ${ssm:/${self:service.name}/${self:provider.stage}/dynamodb_temp_table_arn}
+  dbStatusName: ${ssm:/${self:service.name}/${self:provider.stage}/dynamodb_status_table}
+  dbStatusArn: ${ssm:/${self:service.name}/${self:provider.stage}/dynamodb_status_table_arn}
+  sqsQueryLogsArn: ${ssm:/${self:service.name}/${self:provider.stage}/sqs_query_logs_arn}
+  sqsQueryDbArn: ${ssm:/${self:service.name}/${self:provider.stage}/sqs_query_db_arn}
+  # this allows tldextract to use built-in snapshot
+  tldCacheFile: "/opt/python/tldextract/.tld_set_snapshot"
 
 functions:
+  # Query Logs
   query_logs:
+    description: Query the certs from the Certificate Transparency Logs
     handler: query_logs.query_to_db
     timeout: 240
     memorySize: 2048
@@ -36,34 +40,39 @@ functions:
       - arn:aws:lambda:${self:custom.awsRegion}:113088814899:layer:Klayers-python37-tldextract:1
       - arn:aws:lambda:${self:custom.awsRegion}:113088814899:layer:Klayers-python37-construct:1
     environment:
-      bucket_name: ${self:custom.bucketName}
-      db_table_name: ${self:custom.dbTableName}
+      db_table_name: ${self:custom.dbTempName}
+      db_status_name: ${self:custom.dbStatusName}
       TLDEXTRACT_CACHE: ${self:custom.tldCacheFile}
     iamRoleStatements:
     - Effect: Allow
       Action:
       - dynamodb:PutItem
       - dynamodb:BatchWriteItem
-      Resource: ${self:custom.dbTableArn}
+      Resource: ${self:custom.dbTempArn}
+    - Effect: Allow
+      Action:
+      - dynamodb:PutItem
+      Resource: ${self:custom.dbStatusArn}
     - Effect: Allow
       Action:
       - sqs:ReceiveMessage
       - sqs:DeleteMessage
       - sqs:GetQueueAttributes
-      Resource: ${self:custom.queryLogsArn}
+      Resource: ${self:custom.sqsQueryLogsArn}
     events:
     - sqs:
-        arn: ${self:custom.queryLogsArn}
+        arn: ${self:custom.sqsQueryLogsArn}
         batchSize: 1
     reservedConcurrency: 10
   ### Query DB #####
   query_db:
+    description: Query the records from DynamoDB temp table, and update final domain files
     handler: query_db.main
     timeout: 30
     memorySize: 256
     environment:
-      bucket_name: ${self:custom.bucketName}
-      db_table_name: ${self:custom.dbTableName}
+      bucket_name: ${self:custom.s3DomainsName}
+      db_table_name: ${self:custom.dbTempName}
     iamRoleStatements:
     - Effect: Allow
       Action:
@@ -73,22 +82,26 @@ functions:
       - s3:PutObjectAcl
       - s3:GetObjectAcl
       - s3:AbortMultipartUpload
-      Resource: ${self:custom.bucketArn}/*
+      Resource: ${self:custom.s3DomainsArn}/*
+    - Effect: Allow
+      Action:
+      - s3:ListBucket
+      Resource: ${self:custom.s3DomainsArn}
     - Effect: Allow
       Action:
       - dynamodb:Query
       - dynamodb:BatchGetItem
       - dynamodb:Scan
-      Resource: ${self:custom.dbTableArn}
+      Resource: ${self:custom.dbTempArn}
     - Effect: Allow
       Action:
       - sqs:ReceiveMessage
       - sqs:DeleteMessage
       - sqs:GetQueueAttributes
-      Resource: ${self:custom.queryDbArn}
+      Resource: ${self:custom.sqsQueryDbArn}
     events:
     - sqs:
-        arn: ${self:custom.queryDbArn}
+        arn: ${self:custom.sqsQueryDbArn}
         batchSize: 1
     reservedConcurrency: 30
 
