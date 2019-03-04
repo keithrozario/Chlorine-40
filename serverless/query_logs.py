@@ -14,9 +14,20 @@ import tldextract
 import logging
 from botocore.exceptions import ClientError
 
-
 logger = logging.getLogger()
 logger.setLevel(logging.INFO)
+
+
+def write_status_to_db(cert_log, end_pos):
+    dynamodb = boto3.client('dynamodb')
+    try:
+        dynamodb.put_item(TableName=os.environ['db_status_name'],
+                          Item={'cert_log': {'S': cert_log},
+                                'end_pos': {'S': "{:010}".format(end_pos)}})
+        logger.info("Successfully written status to DB")
+    except ClientError as e:
+        logger.info("Unexpected error Writing to DB: {}".format(e.response['Error']['Code']))
+    return True
 
 
 def chunk_list(l, chunk_length):
@@ -103,7 +114,10 @@ def query_api(log_url, start_pos, end_pos, max_block_size=256):
     # group all domains starting with the same 2 letters
     d = collections.defaultdict(list)
     for domain in uni_domains:
-        d[domain[:2]].append(domain)
+        if domain[:2].isascii():
+            d[domain[:2]].append(domain)
+        else:
+            d['**'].append(domain)  # it is possible for non-ascii in domain name (punycode)
 
     return d
 
@@ -150,8 +164,8 @@ def query_to_db(event, context):
             domains_str = json.dumps(results[initials])
             items = []
 
-            # Check for empty string
-            if not domains_str:
+            # Check for a string of empty list '[""]'
+            if len(domains_str) < 5:
                 continue
             # Check if domain string can fit into a single DynamoDB item
             elif len(domains_str) < 200000:
@@ -178,24 +192,31 @@ def query_to_db(event, context):
                         logger.info("Validation Exception near insertion of '{}'".format(initials))
                     else:
                         logger.info("Unexpected error near insertion of '{}' ".format(initials))
+                except:
+                    logger.info("Unexpected Error")
+
+    # Write Status to DB
+    write_status_to_db(cert_log=log_url,
+                       end_pos=end_position)
 
     return {'statusCode': 200}
 
 
 if __name__ == '__main__':
     start = time.time()
-    log_url = 'https://ct.googleapis.com/logs/argon2019'
+    log_url = 'https://ct.cloudflare.com/logs/nimbus2019/'
 
-    event = dict()
+    body = dict()
     os.environ['db_table_name'] = 'cert-domains'
+    os.environ['db_status_name'] = 'cert-status'
     os.environ['AWS_REGION'] = 'us-east-1'
-    event['log_url'] = log_url
-    event['start_pos'] = 5120 * 40
-    event['end_pos'] = 5120 * 41
-    event['max_block_size'] = 256
+    body['log_url'] = log_url
+    body['start_pos'] = 0
+    body['end_pos'] = 256
+    body['max_block_size'] = 256
 
-    query_to_db(event, {})
+    query_to_db({"Records": [{"body": json.dumps(body)}]}, {})
 
     end = time.time()
-    print("Log Size: {}\n Time Taken: {}\n".format(event['end_pos'], end-start))
+    print("Log Size: {}\n Time Taken: {}\n".format(body['end_pos'], end-start))
 
