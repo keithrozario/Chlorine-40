@@ -1,7 +1,8 @@
 variable "app_name" {}
 variable "aws_region" { type = "map" }
 variable "s3bucket_domains" { type = "map" }
-variable "dynamo_db_table" { type="map" }
+variable "dynamodb_temp" { type="map" }
+variable "dynamodb_status" { type="map" }
 variable "sqs_query_logs" { type = "map" }
 variable "sqs_query_db" { type = "map" }
 
@@ -16,7 +17,7 @@ provider "aws" {
 ## DynamoDB Table
 resource "aws_dynamodb_table" "dynamodb_temp" {
 
-  name           = "${lookup(var.dynamo_db_table, terraform.workspace)}"
+  name           = "${lookup(var.dynamodb_temp, terraform.workspace)}"
   billing_mode   = "PAY_PER_REQUEST"
   hash_key       = "initials"
   range_key      = "start_pos"
@@ -34,6 +35,25 @@ resource "aws_dynamodb_table" "dynamodb_temp" {
   ttl {
     attribute_name = "TTL"
     enabled = true
+  }
+
+}
+
+resource "aws_dynamodb_table" "dynamodb_status" {
+
+  name           = "${lookup(var.dynamodb_status, terraform.workspace)}"
+  billing_mode   = "PAY_PER_REQUEST"
+  hash_key       = "cert_log"
+  range_key      = "end_pos"
+
+  attribute {
+    name = "cert_log"
+    type = "S"
+  }
+
+  attribute {
+    name = "end_pos"
+    type = "S"
   }
 
 }
@@ -85,10 +105,10 @@ resource "aws_s3_bucket" "s3bucket_domains" {
 }
 
 
-# Outputs for serverless to consume
+### Outputs for serverless to consume
 resource "aws_ssm_parameter" "ssm_dynamodb_temp_table" {
   type  = "String"
-  description = "Name of DynamoDB Table"
+  description = "Name of DynamoDB Temp Table"
   name  = "/${var.app_name}/${terraform.workspace}/dynamodb_temp_table"
   value = "${aws_dynamodb_table.dynamodb_temp.name}"
   overwrite = true
@@ -96,9 +116,25 @@ resource "aws_ssm_parameter" "ssm_dynamodb_temp_table" {
 
 resource "aws_ssm_parameter" "ssm_dynamodb_temp_table_arn" {
   type  = "String"
-  description = "Name of DynamoDB Table"
+  description = "ARN of DynamoDB Temp Table"
   name  = "/${var.app_name}/${terraform.workspace}/dynamodb_temp_table_arn"
   value = "${aws_dynamodb_table.dynamodb_temp.arn}"
+  overwrite = true
+}
+
+resource "aws_ssm_parameter" "ssm_dynamodb_status_table" {
+  type  = "String"
+  description = "Name of DynamoDB Status Table"
+  name  = "/${var.app_name}/${terraform.workspace}/dynamodb_status_table"
+  value = "${aws_dynamodb_table.dynamodb_status.name}"
+  overwrite = true
+}
+
+resource "aws_ssm_parameter" "ssm_dynamodb_status_table_arn" {
+  type  = "String"
+  description = "Name of DynamoDB Status Table ARN"
+  name  = "/${var.app_name}/${terraform.workspace}/dynamodb_status_table_arn"
+  value = "${aws_dynamodb_table.dynamodb_status.arn}"
   overwrite = true
 }
 
