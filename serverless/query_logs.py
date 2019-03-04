@@ -136,6 +136,7 @@ def query_to_db(event, context):
         log_url = message['log_url']
         start_position = message['start_pos']
         end_position = message['end_pos']
+        block_size = message.get('block_size', 256)
     except KeyError:
         logger.info("Missing argument in que message")
         logger.info("Message dump: {}".format(json.dumps(message)))
@@ -145,7 +146,7 @@ def query_to_db(event, context):
     results = query_api(log_url=log_url,
                         start_pos=start_position,
                         end_pos=end_position,
-                        max_block_size=256)
+                        max_block_size=block_size)
 
     if not results:  # empty list
         return {'statusCode': 500}
