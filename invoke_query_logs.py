@@ -55,12 +55,17 @@ if __name__ == '__main__':
                         help="Number of lambdas to invoke",
                         type=int,
                         default=10)
+    parser.add_argument("-b", "--block_size",
+                        help="Size of each block requests to the certificate log",
+                        type=int,
+                        default=256)
     args = parser.parse_args()
 
     log_url = args.log_url
     env = args.environment
     certs_per_invoke = args.per_lambda
     invocations = args.number_lambdas
+    block_size = args.block_size
 
     # Get existing config
     config = get_config()
@@ -80,6 +85,7 @@ if __name__ == '__main__':
     max_batch_size = 10
 
     message_bodies = [{'log_url': log_url,
+                       'block_size': block_size,
                        'start_pos': start + (x * certs_per_invoke),
                        'end_pos': start + ((x+1) * certs_per_invoke)} for x in range(invocations)]
     message_batch = [{'MessageBody': json.dumps(body), "Id": uuid.uuid4().__str__()}
