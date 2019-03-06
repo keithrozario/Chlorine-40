@@ -75,7 +75,7 @@ if __name__ == '__main__':
     que_dl_url = get_ssm(aws_region, app_name, env, 'sqs_query_logs_dl_url')
     status_table = get_ssm(aws_region, app_name, env, 'dynamodb_status_table')
 
-    # Get Start
+    # Get Start Position
     start = get_last_entry(region=aws_region,
                            table=status_table,
                            key_value=log_url,
