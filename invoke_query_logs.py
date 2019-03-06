@@ -72,6 +72,7 @@ if __name__ == '__main__':
     aws_region = config['aws_region'][env]
     app_name = config['app_name']
     que_url = get_ssm(aws_region, app_name, env, 'sqs_query_logs_url')
+    que_dl_url = get_ssm(aws_region, app_name, env, 'sqs_query_logs_dl_url')
     status_table = get_ssm(aws_region, app_name, env, 'dynamodb_status_table')
 
     # Get Start
@@ -95,36 +96,50 @@ if __name__ == '__main__':
     logger.info("Putting {} messages on SQS Que: {}".format(len(message_batch),
                                                             que_url))
     start_time = int(time.time() * 1000)
+    num_messages_success = 0
+    num_messages_failed =0
     for k in range(0, len(message_batch), max_batch_size):
         response = client.send_message_batch(QueueUrl=que_url,
                                              Entries=message_batch[k:k+max_batch_size])
 
-        if len(response.get('Successful',  [])) == max_batch_size:
-            logger.info("{} successful, {} total messages sent".format(len(response.get('Successful',  [])),
-                                                                       k + max_batch_size))
-    # Check Que
+        num_messages_success += len(response.get('Successful',  []))
+        num_messages_failed += len(response.get('Failed',  []))
+    logger.info(f"Total Messages: {len(message_batch)}")
+    logger.info(f"Successfully sent: {num_messages_success}")
+    logger.info(f"Failed to send: {num_messages_failed}")
+
+    # Check SQS Que
+    logger.info("Checking SQS Que....")
     while True:
         time.sleep(30)
         response = client.get_queue_attributes(QueueUrl=que_url,
                                                AttributeNames=['ApproximateNumberOfMessages',
                                                                'ApproximateNumberOfMessagesNotVisible'])
-        num_messages = int(response['Attributes']['ApproximateNumberOfMessages'])
+        num_messages_on_que = int(response['Attributes']['ApproximateNumberOfMessages'])
         num_messages_hidden = int(response['Attributes']['ApproximateNumberOfMessagesNotVisible'])
 
-        logger.info("{} messages left on Que, {} messages not visible".format(num_messages,
+        logger.info("{} messages left on Que, {} messages not visible".format(num_messages_on_que,
                                                                               num_messages_hidden))
-        # Check if all messages processed
-        if num_messages == 0:
+        if num_messages_on_que == 0:
             break
 
-    # Check Lmabdas
-    end = 0
-    while end < (start + certs_per_invoke * invocations):
-        time.sleep(30)
-        end = get_last_entry(region=aws_region,
-                             table=status_table,
-                             key_value=log_url,
-                             key_name='cert_log')
-        logger.info("Queried {} until position: {}".format(log_url, end))
+    # Check DLQ
+    logger.info("No messages left on SQS Que, checking DLQ:")
+    response = client.get_queue_attributes(QueueUrl=que_dl_url,
+                                           AttributeNames=['ApproximateNumberOfMessages',
+                                                           'ApproximateNumberOfMessagesNotVisible'])
+    num_dead_letters = int(response['Attributes']['ApproximateNumberOfMessages'])
+    if num_dead_letters == 0:
+        logger.info("No Dead Letters found. All Que messages successfully processed")
+    else:
+        logger.info(f"{num_dead_letters} messages failed. Check dead letter que for more info")
+
+    # Check DynamoDB (where lambda publish success messages to)
+    logger.info("Getting latest position from Lambdas...")
+    end = get_last_entry(region=aws_region,
+                         table=status_table,
+                         key_value=log_url,
+                         key_name='cert_log')
+    logger.info("Queried {} until position {} successfully".format(log_url, end))
 
     logger.info('End')
