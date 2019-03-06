@@ -170,6 +170,14 @@ resource "aws_ssm_parameter" "ssm_sqs_query_db_url" {
   overwrite = true
 }
 
+resource "aws_ssm_parameter" "ssm_sqs_query_logs_dl_url" {
+  type  = "String"
+  description = "Que for querying certificate logs"
+  name  = "/${var.app_name}/${terraform.workspace}/sqs_query_logs_dl_url"
+  value = "${aws_sqs_queue.sqs_query_logs_dl.id}"
+  overwrite = true
+}
+
 resource "aws_ssm_parameter" "ssm_s3bucket_domains" {
   type  = "String"
   name  = "/${var.app_name}/${terraform.workspace}/s3bucket_domains"
