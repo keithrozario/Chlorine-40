@@ -79,8 +79,8 @@ if __name__ == '__main__':
         num_messages_on_que = int(response['Attributes']['ApproximateNumberOfMessages'])
         num_messages_hidden = int(response['Attributes']['ApproximateNumberOfMessagesNotVisible'])
 
-        logger.info("{} messages left on Que, {} messages not visible".format(num_messages_on_que,
-                                                                              num_messages_hidden))
+        logger.info(f"{num_messages_on_que} messages left on Que, {num_messages_hidden} messages not visible")
+
         if num_messages_on_que == 0:
             break
 

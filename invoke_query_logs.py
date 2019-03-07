@@ -93,8 +93,7 @@ if __name__ == '__main__':
                      for body in message_bodies]
 
     # Put Messages on SQS
-    logger.info("Putting {} messages on SQS Que: {}".format(len(message_batch),
-                                                            que_url))
+    logger.info(f"Putting {len(message_batch)} messages on SQS Que: {que_url)}")
     start_time = int(time.time() * 1000)
     num_messages_success = 0
     num_messages_failed =0
@@ -118,8 +117,7 @@ if __name__ == '__main__':
         num_messages_on_que = int(response['Attributes']['ApproximateNumberOfMessages'])
         num_messages_hidden = int(response['Attributes']['ApproximateNumberOfMessagesNotVisible'])
 
-        logger.info("{} messages left on Que, {} messages not visible".format(num_messages_on_que,
-                                                                              num_messages_hidden))
+        logger.info(f"{num_messages_on_que} messages left on Que, {num_messages_hidden} messages not visible")
         if num_messages_on_que == 0:
             break
 
@@ -140,6 +138,6 @@ if __name__ == '__main__':
                          table=status_table,
                          key_value=log_url,
                          key_name='cert_log')
-    logger.info("Queried {} until position {} successfully".format(log_url, end))
+    logger.info(f"Queried {log_url} until position {end} successfully")
 
     logger.info('End')
