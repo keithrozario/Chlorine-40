@@ -48,3 +48,10 @@ It takes another 5 minutes to transfer data from DynamoDB onto S3
 # Architecture 
 
 ![Screenshot](screenshots/architecture.png)
+
+# Why the name
+
+I'm getting the habit of naming all my serverless projects after radioactive isotopes and this is no different. 
+
+I picked Chlorine-40 because, Chlorine has a chemical symbol of Cl (corresponding to Certificate Log), and it actually decays to Argon, which is the name of one of Google's certificate logs.
+
