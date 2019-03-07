@@ -93,7 +93,7 @@ if __name__ == '__main__':
                      for body in message_bodies]
 
     # Put Messages on SQS
-    logger.info(f"Putting {len(message_batch)} messages on SQS Que: {que_url)}")
+    logger.info(f"Putting {len(message_batch)} messages on SQS Que: {que_url}")
     start_time = int(time.time() * 1000)
     num_messages_success = 0
     num_messages_failed =0
