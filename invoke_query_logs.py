@@ -138,6 +138,6 @@ if __name__ == '__main__':
                          table=status_table,
                          key_value=log_url,
                          key_name='cert_log')
-    logger.info(f"Queried {log_url} until position {end} successfully")
+    logger.info(f"Queried {log_url} until position {end:,} successfully")
 
     logger.info('End')
