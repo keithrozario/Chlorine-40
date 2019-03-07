@@ -103,7 +103,7 @@ functions:
     - sqs:
         arn: ${self:custom.sqsQueryDbArn}
         batchSize: 1
-    reservedConcurrency: 30
+    reservedConcurrency: 50
 
 # don't package these files
 package:
