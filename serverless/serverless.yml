@@ -72,6 +72,7 @@ functions:
     memorySize: 256
     environment:
       bucket_name: ${self:custom.s3DomainsName}
+      db_status_name: ${self:custom.dbStatusName}
       db_table_name: ${self:custom.dbTempName}
     iamRoleStatements:
     - Effect: Allow
@@ -93,6 +94,10 @@ functions:
       - dynamodb:BatchGetItem
       - dynamodb:Scan
       Resource: ${self:custom.dbTempArn}
+    - Effect: Allow
+      Action:
+      - dynamodb:Query
+      Resource: ${self:custom.dbStatusArn}
     - Effect: Allow
       Action:
       - sqs:ReceiveMessage
