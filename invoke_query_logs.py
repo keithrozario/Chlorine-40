@@ -45,18 +45,18 @@ if __name__ == '__main__':
                         help="url of the cert log",
                         default='https://ct.cloudflare.com/logs/nimbus2019/')
     parser.add_argument("-p", "--per_lambda",
-                        help="Number of records to process per lambda, default is 128k",
+                        help="Number of records to process per lambda [default: 128k]",
                         type=int,
                         default=1024*128)
     parser.add_argument("-e", "--environment",
                         help="Stage to query",
                         default='default')
     parser.add_argument("-n", "--number_lambdas",
-                        help="Number of lambdas to invoke",
+                        help="Number of lambdas to invoke [default: 10]",
                         type=int,
                         default=10)
     parser.add_argument("-b", "--block_size",
-                        help="Size of each block requests to the certificate log",
+                        help="Size of each block requests to the certificate log [default: 256]",
                         type=int,
                         default=256)
     args = parser.parse_args()
