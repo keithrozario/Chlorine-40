@@ -35,7 +35,7 @@ if __name__ == '__main__':
                         default='all')
     args = parser.parse_args()
 
-    env = 'default'
+    env = args.environment
     initials = args.initials
 
     config = get_config()
@@ -46,16 +46,16 @@ if __name__ == '__main__':
     client = boto3.client('sqs', region_name=aws_region)
     max_batch_size = 10
 
+    # set keywords
     if initials == 'all':
         keywords = map(''.join, product(ascii_lowercase + '0123456789-', repeat=2))
     else:
         keywords = [initials]
-
     message_bodies = [{"initials": keyword} for keyword in keywords]
-
     message_batch = [{'MessageBody': json.dumps(body), "Id": uuid.uuid4().__str__()}
                      for body in message_bodies]
 
+    # write out to SQS Que
     logger.info(f"Placing {len(message_bodies)} onto SQS Que at: {que_url}")
     num_messages_success = 0
     num_messages_failed =0
