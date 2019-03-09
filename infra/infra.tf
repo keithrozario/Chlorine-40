@@ -32,6 +32,11 @@ resource "aws_dynamodb_table" "dynamodb_temp" {
     type = "S"
   }
 
+  attribute {
+    name = "end_pos"
+    type = "S"
+  }
+
   ttl {
     attribute_name = "TTL"
     enabled = true
