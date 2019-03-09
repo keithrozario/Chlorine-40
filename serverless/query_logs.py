@@ -167,6 +167,9 @@ def main(event, context):
         logger.info("Message dump: {}".format(json.dumps(message)))
         return {'status': 500}  # return 'successfully' to SQS to prevent retry
 
+    logger.info("Querying {} from {} to {}".format(log_url,
+                                                   start_position,
+                                                   end_position))
     # get data from cert logs api
     results = query_api(log_url=log_url,
                         start_pos=start_position,
@@ -196,6 +199,7 @@ def main(event, context):
             elif len(domains_str) < 200000:
                 items.append({"initials": initials,
                               "start_pos": "{:010}".format(start_position),
+                              "end_pos": "{:010}".format(end_position),
                               "domains": domains_str})
             # 'chunk' domains into multiple items if too big
             else:
@@ -205,6 +209,7 @@ def main(event, context):
                 for k, chunk in enumerate(chunks):
                     items.append({"initials": initials,
                                   "start_pos": "{:010}-{}".format(start_position, k),
+                                  "end_pos": "{:010}".format(end_position),
                                   "domains": json.dumps(chunk)})
 
             # write out items list to dynamoDB
