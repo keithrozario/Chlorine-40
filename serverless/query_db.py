@@ -6,7 +6,6 @@ import io
 import gzip
 
 from boto3.dynamodb.conditions import Key
-from json import JSONDecodeError
 from botocore.exceptions import ClientError
 
 logger = logging.getLogger()
@@ -19,8 +18,8 @@ def main(event, context):
     try:
         message = json.loads(event['Records'][0]['body'])
         initials = message['initials']
-    except JSONDecodeError:
-        logger.info(event)
+    except json.JSONDecodeError:
+        logger.info("JSON Decoder error for event: {}".format(event))
     except KeyError:
         logger.info("Missing argument in que message")
         logger.info("Message dump: {}".format(json.dumps(message)))
