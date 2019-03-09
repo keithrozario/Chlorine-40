@@ -46,7 +46,7 @@ def get_start_end(start, end, max_block_size):
     tuples = []
 
     for k in range(x):
-        if start+max_block_size < end:
+        if start + max_block_size < end:
             tuples.append((start, start+max_block_size-1))
             start += max_block_size
         else:
@@ -76,6 +76,43 @@ async def run(url, start, end, max_block_size=256):
     return responses
 
 
+def group_domains(fqdns):
+
+    """
+    returns collection of list grouped by first two initials of the domain
+    """
+
+    domains = map(lambda k: tldextract.extract(k).registered_domain, fqdns)
+    uni_domains = list(set(domains))
+    logger.info("Found {} unique domains".format(len(uni_domains)))
+
+    # group all domains starting with the same 2 letters
+    col_domains = collections.defaultdict(list)
+    for domain in uni_domains:
+        if domain[:2].isascii():
+            if len(domain) > 0:
+                col_domains[domain[:2]].append(domain)
+        else:
+            col_domains['**'].append(domain)  # it is possible for non-ascii in domain name (punycode)
+
+    return col_domains
+
+
+def get_puny_fqdns(fqdns):
+    """
+    returns collection of two list
+    one for punycode fqdns (beginning with 'xn--')
+    one for non-ascii fqdns
+    """
+    result = collections.defaultdict(list)
+    result['xn--'] = list(filter(lambda fqdn: fqdn[:4] == 'xn--', fqdns))
+    result['**'] = list(filter(lambda fqdn: not fqdn.isascii(), fqdns))
+    logger.info("Found {} puny fqdns and {} non-ascii fqdns".format(len(result['xn--']),
+                                                                    len(result['**'])))
+
+    return result
+
+
 def query_api(log_url, start_pos, end_pos, max_block_size=256):
 
     loop = asyncio.get_event_loop()
@@ -103,27 +140,13 @@ def query_api(log_url, start_pos, end_pos, max_block_size=256):
                 fqdns.extend(certlib.add_all_domains(certlib.dump_cert(chain[0])))
 
     logger.info("Found {} fqdns".format(len(fqdns)))
-
     uni_fqdns = list(set(fqdns))
     logger.info("Found {} unique fqdns".format(len(uni_fqdns)))
 
-    domains = map(lambda k: tldextract.extract(k).registered_domain, uni_fqdns)
-    uni_domains = list(set(domains))
-    logger.info("Found {} unique domains".format(len(uni_domains)))
-
-    # group all domains starting with the same 2 letters
-    d = collections.defaultdict(list)
-    for domain in uni_domains:
-        if domain[:2].isascii():
-            if len(domain) > 0:
-                d[domain[:2]].append(domain)
-        else:
-            d['**'].append(domain)  # it is possible for non-ascii in domain name (punycode)
-
-    return d
+    return get_puny_fqdns(uni_fqdns)
 
 
-def query_to_db(event, context):
+def main(event, context):
 
     """
     Queries the cert log @ log_url, from start_pos to end_pos in blocks of max_block_size
@@ -138,6 +161,7 @@ def query_to_db(event, context):
         start_position = message['start_pos']
         end_position = message['end_pos']
         block_size = message.get('block_size', 256)
+        ttl_in_seconds = message.get('ttl', 3600 * 48)  # default is 48 hours
     except KeyError:
         logger.info("Missing argument in que message")
         logger.info("Message dump: {}".format(json.dumps(message)))
@@ -150,19 +174,18 @@ def query_to_db(event, context):
                         max_block_size=block_size)
 
     if not results:  # empty list
-        return {'statusCode': 500}
+        exit(1)  # die and let re-drive policy retry
 
     # setup DynamoDB
     table_name = os.environ['db_table_name']
     dynamodb = boto3.resource('dynamodb', region_name=os.environ['AWS_REGION'])
     table = dynamodb.Table(table_name)
-    ttl = int(time.time()) + (3600 * 4)  # set  time to live of record to 4 hours
+    ttl = int(time.time()) + ttl_in_seconds
     logger.info("Writing Data to DynamoDB")
 
-    # d is a list of list
     with table.batch_writer() as batch:
+        # results is a list of list
         for initials in results:
-
             domains_str = json.dumps(results[initials])
             items = []
 
@@ -194,8 +217,6 @@ def query_to_db(event, context):
                         logger.info("Validation Exception near insertion of '{}'".format(initials))
                     else:
                         logger.info("Unexpected error near insertion of '{}' ".format(initials))
-                except:
-                    logger.info("Unexpected Error")
 
     # Write Status to DB
     write_status_to_db(cert_log=log_url,
@@ -217,7 +238,7 @@ if __name__ == '__main__':
     body['end_pos'] = 256
     body['max_block_size'] = 256
 
-    query_to_db({"Records": [{"body": json.dumps(body)}]}, {})
+    main({"Records": [{"body": json.dumps(body)}]}, {})
 
     end = time.time()
     print("Log Size: {}\n Time Taken: {}\n".format(body['end_pos'], end-start))
