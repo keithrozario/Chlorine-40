@@ -33,7 +33,7 @@ functions:
     description: Query the certs from the Certificate Transparency Logs
     handler: query_logs.main
     timeout: 240
-    memorySize: 1536
+    memorySize: 2048
     layers:
       - arn:aws:lambda:${self:custom.awsRegion}:113088814899:layer:Klayers-python37-aiohttp:4
       - arn:aws:lambda:${self:custom.awsRegion}:113088814899:layer:Klayers-python37-pyOpenSSL:1
@@ -68,8 +68,8 @@ functions:
   query_db:
     description: Query the records from DynamoDB temp table, and update final domain files
     handler: query_db.main
-    timeout: 30
-    memorySize: 256
+    timeout: 90
+    memorySize: 512
     environment:
       bucket_name: ${self:custom.s3DomainsName}
       db_status_name: ${self:custom.dbStatusName}
