@@ -1,9 +1,9 @@
-import boto3
 import os
 import json
 import logging
 import io
 import gzip
+import boto3
 
 from boto3.dynamodb.conditions import Key
 from botocore.exceptions import ClientError
@@ -13,6 +13,11 @@ logger.setLevel(logging.INFO)
 
 
 def get_latest_status():
+
+    """
+    Reads in latest end_pos from per certificate log from the status database
+    returns list of dicts in the form {"name": <name>, "end": <end>}
+    """
 
     dynamodb = boto3.resource('dynamodb')
     dyn_table = dynamodb.Table(os.environ['db_status_name'])
@@ -25,7 +30,7 @@ def get_latest_status():
         response = dyn_table.query(KeyConditionExpression=Key('cert_log').eq(log),
                                    Limit=1,  # Get only one record
                                    ScanIndexForward=False)  # query in descending order
-        if len(response['Items']) > 0:
+        if response['Items']:
             end = int(response['Items'][0]['end_pos'])
         else:
             end = 0
@@ -35,6 +40,12 @@ def get_latest_status():
 
 
 def main(event, context):
+
+    """
+    receives a message from an SQS que
+    retrieves all items corresponding to the initials variable in DyanmoDB
+    merges those items and items in an S3 object
+    """
 
     # retrieve que message
     try:
@@ -70,12 +81,12 @@ def main(event, context):
             domains.extend(json.loads(item['domains']))
 
     # proceed only if there are actual domains
-    if len(domains) > 0:
+    if domains:
         # Make list unique across all domains queried
         unique_db_domains = list(set(domains))
         logger.info("{} calls made, {} domains found,  {} are unique".format(len(response['Items']),
-                                                                       len(domains),
-                                                                       len(unique_db_domains)))
+                                                                             len(domains),
+                                                                             len(unique_db_domains)))
         # read in file from s3
         s3 = boto3.resource('s3')
         bucket = s3.Bucket(os.environ['bucket_name'])
@@ -97,17 +108,18 @@ def main(event, context):
             file_domains = []
 
         # unique-ify the entire list/set (DB records + records in S3)
+        logger.info("Aggregating results...")
         unique_db_domains.extend(file_domains)
         output_domains = list(set(unique_db_domains))
-
         unique_domains = {"length": len(output_domains),
                           "statusPerLog": get_latest_status(),
                           "domains": output_domains}
-        logger.info("Writing {:,} domains to file {}".format(len(output_domains),
-                                                             initials))
 
         # write output to file back to s3
+        logger.info("Compressing results...")
         zip_binary = gzip.compress(json.dumps(unique_domains).encode('ascii'))
+        logger.info("Writing {:,} domains to file {}".format(len(output_domains),
+                                                             initials))
         s3_client = boto3.client('s3')
         s3_client.upload_fileobj(io.BytesIO(zip_binary), os.environ['bucket_name'], file_name)
         head_object = s3_client.head_object(Bucket=os.environ['bucket_name'],
