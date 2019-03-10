@@ -98,6 +98,19 @@ def group_domains(fqdns):
     return col_domains
 
 
+def is_puny(fqdn):
+    """
+    returns true if any 'section' of a url (split by '.') begins with xn--
+    """
+
+    sections = fqdn.split('.')
+    for section in sections:
+        if section[:4] == 'xn--':
+            return True
+    else:
+        return False
+
+
 def get_puny_fqdns(fqdns):
     """
     returns collection of two list
@@ -105,7 +118,7 @@ def get_puny_fqdns(fqdns):
     one for non-ascii fqdns
     """
     result = collections.defaultdict(list)
-    result['xn--'] = list(filter(lambda fqdn: fqdn[:4] == 'xn--', fqdns))
+    result['xn--'] = list(filter(is_puny, fqdns))
     result['**'] = list(filter(lambda fqdn: not fqdn.isascii(), fqdns))
     logger.info("Found {} puny fqdns and {} non-ascii fqdns".format(len(result['xn--']),
                                                                     len(result['**'])))
