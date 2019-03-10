@@ -80,6 +80,7 @@ if __name__ == '__main__':
                            table=status_table,
                            key_value=log_url,
                            key_name='cert_log')
+    logger.info(f"Querying {invocations * certs_per_invoke:,} certs from {log_url} starting from {start:,}")
 
     # SQS Que setup
     client = boto3.client('sqs', region_name=aws_region)
