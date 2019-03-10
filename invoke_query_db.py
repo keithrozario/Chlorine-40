@@ -48,7 +48,8 @@ if __name__ == '__main__':
 
     # set keywords
     if initials == 'all':
-        keywords = map(''.join, product(ascii_lowercase + '0123456789-', repeat=2))
+        # keywords = map(''.join, product(ascii_lowercase + '0123456789-', repeat=2))
+        keywords = ['xn--', '**']
     else:
         keywords = [initials]
     message_bodies = [{"initials": keyword} for keyword in keywords]
