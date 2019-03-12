@@ -25,6 +25,8 @@ serverless/node_modules/
 # infra
 infra/.terraform
 *.tfstate*
+.terraform/
+terraform.tfstate*/
 
 # misc
 .idea/
