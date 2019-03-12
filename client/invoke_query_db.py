@@ -1,15 +1,10 @@
 #! ./venv/bin/python
 
 import boto3
-import json
 import logging
-import uuid
-from itertools import product
-from string import ascii_lowercase
 import argparse
-import time
 
-from invocations import get_config, get_ssm
+from client.invocations import get_config, get_ssm, put_sqs
 
 
 if __name__ == '__main__':
@@ -53,36 +48,12 @@ if __name__ == '__main__':
     else:
         keywords = [initials]
     message_bodies = [{"initials": keyword} for keyword in keywords]
-    message_batch = [{'MessageBody': json.dumps(body), "Id": uuid.uuid4().__str__()}
-                     for body in message_bodies]
 
     # write out to SQS Que
     logger.info(f"Placing {len(message_bodies)} onto SQS Que at: {que_url}")
-    num_messages_success = 0
-    num_messages_failed =0
-    for k in range(0, len(message_batch), max_batch_size):
-        response = client.send_message_batch(QueueUrl=que_url,
-                                             Entries=message_batch[k:k+max_batch_size])
-
-        num_messages_success += len(response.get('Successful',  []))
-        num_messages_failed += len(response.get('Failed',  []))
-    logger.info(f"Total Messages: {len(message_batch)}")
-    logger.info(f"Successfully sent: {num_messages_success}")
-    logger.info(f"Failed to send: {num_messages_failed}")
-
-    # Check SQS Que
-    logger.info("Checking SQS Que....")
-    while True:
-        time.sleep(10)
-        response = client.get_queue_attributes(QueueUrl=que_url,
-                                               AttributeNames=['ApproximateNumberOfMessages',
-                                                               'ApproximateNumberOfMessagesNotVisible'])
-        num_messages_on_que = int(response['Attributes']['ApproximateNumberOfMessages'])
-        num_messages_hidden = int(response['Attributes']['ApproximateNumberOfMessagesNotVisible'])
-
-        logger.info(f"{num_messages_on_que} messages left on Que, {num_messages_hidden} messages not visible")
-
-        if num_messages_on_que == 0:
-            break
+    put_sqs(message_bodies=message_bodies,
+            que_url=que_url,
+            que_dl_url=None,
+            client=client)
 
     logger.info("End")

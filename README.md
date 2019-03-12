@@ -9,27 +9,24 @@ Obviously, it also means every new query has to be done from scratch.
 
 # Installation
 
+## Pre-requisites
+* Python3
+* Terraform
+* Serverless Framework
+
 I use Terraform to deploy the infrastructure and Serverless Framework to deploy the lambda functions.
 
-    $ python -m venv venv/
-    $ source venv/bin/activate
-    $ pip install requirements.txt
-    $ cd infra
-    $ terraform apply
-    $ cd ../serverless
-    $ sls deploy
-    
 Change the bucket name to avoid conflicts.
 
 # To run
 
 To query the cert logs into DynamoDB
 
-    $ ./invoke_query_logs -l https://ct.cloudflare.com/logs/nimbus2019/
+    $ client/invoke_query_logs -l https://ct.cloudflare.com/logs/nimbus2019/
 
 To store all data from DynamoDB into files on S3
 
-    $ ./invoke_query_db 
+    $ client/invoke_query_db 
     
 By default, the script queries just 1.28 Million certs and parses out all the domains from the certs. 
 

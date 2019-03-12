@@ -1,14 +1,16 @@
 import json
 import boto3
 import time
-from botocore.exceptions import ClientError
+import uuid
 import logging
+
+from botocore.exceptions import ClientError
 
 logger = logging.getLogger('__main__')
 
 
 def get_config():
-    with open('infra/terraform.tfvars.json', 'r') as f:
+    with open('../infra/terraform.tfvars.json', 'r') as f:
         config = json.loads(f.read())
 
     return config
@@ -161,3 +163,57 @@ def async_in_region(invoking_function, invoked_function, payloads, region_name=F
         pass  # no concurrency set
 
     return None
+
+
+def put_sqs(message_bodies: list, que_url: str, que_dl_url=None, client=None):
+
+    """
+    receives list of message bodies, together with que url. Puts messages onto que 10 at a time.
+    functions checks Dead Letter Queue in que_dl_url before returning
+    if client is not provided, one will be created in the default region
+    """
+
+    if client is None:
+        client = boto3.client('sqs')
+
+    message_batch = [{'MessageBody': json.dumps(body), "Id": uuid.uuid4().__str__()}
+                     for body in message_bodies]
+    max_batch_size = 10
+    num_messages_success = 0
+    num_messages_failed = 0
+
+    for k in range(0, len(message_batch), max_batch_size):
+        response = client.send_message_batch(QueueUrl=que_url,
+                                             Entries=message_batch[k:k + max_batch_size])
+
+        num_messages_success += len(response.get('Successful', []))
+        num_messages_failed += len(response.get('Failed', []))
+    logger.info(f"Total Messages: {len(message_batch)}")
+    logger.info(f"Successfully sent: {num_messages_success}")
+    logger.info(f"Failed to send: {num_messages_failed}")
+
+    logger.info("Checking SQS Que....")
+    while True:
+        time.sleep(30)
+        response = client.get_queue_attributes(QueueUrl=que_url,
+                                               AttributeNames=['ApproximateNumberOfMessages',
+                                                               'ApproximateNumberOfMessagesNotVisible'])
+        num_messages_on_que = int(response['Attributes']['ApproximateNumberOfMessages'])
+        num_messages_hidden = int(response['Attributes']['ApproximateNumberOfMessagesNotVisible'])
+
+        logger.info(f"{num_messages_on_que} messages left on Que, {num_messages_hidden} messages not visible")
+        if num_messages_on_que == 0:
+            break
+
+    if que_dl_url:
+        logger.info("No messages left on SQS Que, checking DLQ:")
+        response = client.get_queue_attributes(QueueUrl=que_dl_url,
+                                               AttributeNames=['ApproximateNumberOfMessages',
+                                                               'ApproximateNumberOfMessagesNotVisible'])
+        num_dead_letters = int(response['Attributes']['ApproximateNumberOfMessages'])
+        if num_dead_letters == 0:
+            logger.info("No Dead Letters found. All Que messages successfully processed")
+        else:
+            logger.info(f"{num_dead_letters} messages failed. Check dead letter que for more info")
+
+    return True

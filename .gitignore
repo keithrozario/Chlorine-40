@@ -29,5 +29,5 @@ infra/.terraform
 # misc
 .idea/
 __pychache__/
-scan.log
+client/scan.log
 pylintrc
