@@ -1,10 +1,10 @@
-#! ./venv/bin/python
+#!/usr/bin/env python
 
 import boto3
 import logging
 import argparse
 
-from client.invocations import get_config, get_ssm, put_sqs
+from invocations import get_config, get_ssm, put_sqs
 
 
 if __name__ == '__main__':

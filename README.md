@@ -11,10 +11,10 @@ Obviously, it also means every new query has to be done from scratch.
 
 ## Pre-requisites
 * Python3
-* Terraform
-* Serverless Framework
+* [Terraform](https://www.terraform.io/)
+* [Serverless Framework](https://serverless.com/)
 
-I use Terraform to deploy the infrastructure and Serverless Framework to deploy the lambda functions.
+I use Terraform to deploy the infrastructure (DynamoDB, S3 Buckets, SQS etc) and Serverless Framework to deploy the lambda functions.
 
 Change the bucket name to avoid conflicts.
 
