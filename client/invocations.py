@@ -10,19 +10,29 @@ logger = logging.getLogger('__main__')
 
 
 def get_config():
+    """
+    Returns all configuration in the tfvars.json file for terraform
+    """
     with open('../infra/terraform.tfvars.json', 'r') as f:
         config = json.loads(f.read())
 
     return config
 
 
-def get_ssm(aws_region, app_name, env, parameter):
+def get_ssm(parameter, aws_region='us-east-1'):
+    """
+    returns a specific parameter from the ssm parameter store
+    parameter is the fully qualified parameter
+    """
     client = boto3.client('ssm', region_name=aws_region)
-    response = client.get_parameter(Name='/{}/{}/{}'.format(app_name, env, parameter))
+    response = client.get_parameter(Name=parameter)
     return response['Parameter']['Value']
 
 
 def set_concurrency(num_payloads, lambda_client, function_name):
+    """
+    Sets concurrency of a lambda function
+    """
 
     if num_payloads < 100:
         return None
@@ -33,13 +43,6 @@ def set_concurrency(num_payloads, lambda_client, function_name):
         print("{} now has {} reserved concurrent executions".format(function_name,
                                                                     response['ReservedConcurrentExecutions']))
         return None
-
-
-def calc_concurrency(num_payloads):
-    if num_payloads > 100:
-        return num_payloads + 10
-    else:
-        return num_payloads
 
 
 def get_log_events(region, function_name, start_time):

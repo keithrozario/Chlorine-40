@@ -36,7 +36,10 @@ if __name__ == '__main__':
     config = get_config()
     aws_region = config['aws_region'][env]
     app_name = config['app_name']
-    que_url = get_ssm(aws_region, app_name, env, 'sqs_query_db_url')
+
+    ssm_param_prefix = f"/{app_name}/{env}"
+    que_url = get_ssm(f"{ssm_param_prefix}/sqs_query_db_url", aws_region=aws_region)
+    que_dl_url = get_ssm(f"{ssm_param_prefix}/sqs_query_db_dl_url", aws_region=aws_region)
 
     client = boto3.client('sqs', region_name=aws_region)
     max_batch_size = 10
@@ -53,7 +56,7 @@ if __name__ == '__main__':
     logger.info(f"Placing {len(message_bodies)} onto SQS Que at: {que_url}")
     put_sqs(message_bodies=message_bodies,
             que_url=que_url,
-            que_dl_url=None,
+            que_dl_url=que_dl_url,
             client=client)
 
     logger.info("End")

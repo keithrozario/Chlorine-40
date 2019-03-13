@@ -68,9 +68,11 @@ if __name__ == '__main__':
     config = get_config()
     aws_region = config['aws_region'][env]
     app_name = config['app_name']
-    que_url = get_ssm(aws_region, app_name, env, 'sqs_query_logs_url')
-    que_dl_url = get_ssm(aws_region, app_name, env, 'sqs_query_logs_dl_url')
-    status_table = get_ssm(aws_region, app_name, env, 'dynamodb_status_table')
+
+    ssm_param_prefix = f"/{app_name}/{env}"
+    que_url = get_ssm(f"{ssm_param_prefix}/sqs_query_logs_url", aws_region=aws_region)
+    que_dl_url = get_ssm(f"{ssm_param_prefix}/sqs_query_logs_dl_url", aws_region=aws_region)
+    status_table = get_ssm(f"{ssm_param_prefix}/dynamodb_status_table", aws_region=aws_region)
 
     # Get Start Position
     start = get_last_entry(region=aws_region,
