@@ -38,7 +38,7 @@ The files are sorted by the first two characters of the domain.
 
 In general, 10 parallel lambdas will take 10 minutes to query 25 Million certs, storing their results in a DynamoDB table.
 
-It takes another 5 minutes to transfer data from DynamoDB onto S3
+It takes an additional 5 minutes to transfer data from DynamoDB onto S3 (depending on number of records)
 
 ![Screenshot](screenshots/terminal_invoke.png)
 
