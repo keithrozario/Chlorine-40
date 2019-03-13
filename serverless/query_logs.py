@@ -245,7 +245,7 @@ def main(event, context):
 
 if __name__ == '__main__':
     start = time.time()
-    log_url = 'https://ct.cloudflare.com/logs/nimbus2019/'
+    log_url = 'https://ct.cloudflare.com/logs/nimbus2019'
 
     body = dict()
     os.environ['db_table_name'] = 'cert-domains'
