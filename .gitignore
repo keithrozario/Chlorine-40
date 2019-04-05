@@ -33,3 +33,5 @@ terraform.tfstate*/
 __pychache__/
 client/scan.log
 pylintrc
+venv/
+client/venv
