@@ -1,6 +1,7 @@
 variable "app_name" {}
 variable "aws_region" { type = "map" }
 variable "s3bucket_domains" { type = "map" }
+variable "s3bucket_ocr" { type= "map" }
 variable "dynamodb_temp" { type="map" }
 variable "dynamodb_status" { type="map" }
 variable "sqs_query_logs" { type = "map" }
@@ -101,7 +102,14 @@ resource "aws_sqs_queue" "sqs_query_db" {
 resource "aws_s3_bucket" "s3bucket_domains" {
   bucket = "${lookup(var.s3bucket_domains, terraform.workspace)}"
   acl    = "private"
-  force_destroy = false  # prevent terraform from deleting this bucket if it has objects inside
+  force_destroy = false
+}
+
+## S3 Bucket
+resource "aws_s3_bucket" "s3bucket_ocr_domains" {
+  bucket = "${lookup(var.s3bucket_ocr, terraform.workspace)}"
+  acl    = "private"
+  force_destroy = false
 }
 
 
