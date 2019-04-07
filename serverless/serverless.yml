@@ -18,12 +18,15 @@ custom:
   # environment variables
   s3DomainsName: ${ssm:/${self:service.name}/${self:provider.stage}/s3bucket_domains}
   s3DomainsArn: ${ssm:/${self:service.name}/${self:provider.stage}/s3bucket_domains_arn}
+  s3OcrName: ${ssm:/${self:service.name}/${self:provider.stage}/s3bucket_ocr}
+  s3OcrArn: ${ssm:/${self:service.name}/${self:provider.stage}/s3bucket_ocr_arn}
   dbTempName: ${ssm:/${self:service.name}/${self:provider.stage}/dynamodb_temp_table}
   dbTempArn: ${ssm:/${self:service.name}/${self:provider.stage}/dynamodb_temp_table_arn}
   dbStatusName: ${ssm:/${self:service.name}/${self:provider.stage}/dynamodb_status_table}
   dbStatusArn: ${ssm:/${self:service.name}/${self:provider.stage}/dynamodb_status_table_arn}
   sqsQueryLogsArn: ${ssm:/${self:service.name}/${self:provider.stage}/sqs_query_logs_arn}
   sqsQueryDbArn: ${ssm:/${self:service.name}/${self:provider.stage}/sqs_query_db_arn}
+  sqsOcrArn: ${ssm:/${self:service.name}/${self:provider.stage}/sqs_ocr_arn}
   # this allows tldextract to use built-in snapshot
   tldCacheFile: "/opt/python/tldextract/.tld_set_snapshot"
 
@@ -109,6 +112,49 @@ functions:
         arn: ${self:custom.sqsQueryDbArn}
         batchSize: 1
     reservedConcurrency: 50
+  ### ocr image ##
+  draw_ocr:
+    description: Draws out domain name, and ocr's it back to text
+    handler: draw_ocr.main
+    timeout: 180
+    memorySize: 512
+    environment:
+      ocr_bucket_name: ${self:custom.s3OcrName}
+    iamRoleStatements:
+      - Effect: Allow
+        Action:
+          - s3:PutObject
+        Resource: ${self:custom.s3OcrArn}/*
+      - Effect: Allow
+        Action:
+          - s3:ListBucket
+        Resource: ${self:custom.s3OcrArn}
+      - Effect: Allow
+        Action:
+          - sqs:ReceiveMessage
+          - sqs:DeleteMessage
+          - sqs:GetQueueAttributes
+        Resource: ${self:custom.sqsOcrArn}
+    events:
+      - sqs:
+          arn: ${self:custom.sqsOcrArn}
+          batchSize: 1
+    # reservedConcurrency: 800  # no reserve maximum effort! :)
+    layers:
+      - 'Fn::Join':
+          - ':'
+          - - 'arn:aws:lambda'
+            - Ref: 'AWS::Region'
+            - Ref: 'AWS::AccountId'
+            - 'layer:tesseract:1'
+      - 'Fn::Join':
+          - ':'
+          - - 'arn:aws:lambda'
+            - Ref: 'AWS::Region'
+            - '113088814899:layer:Klayers-python37-pytesseract:1'
+
+
+
 
 # don't package these files
 package:

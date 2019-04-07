@@ -6,6 +6,7 @@ variable "dynamodb_temp" { type="map" }
 variable "dynamodb_status" { type="map" }
 variable "sqs_query_logs" { type = "map" }
 variable "sqs_query_db" { type = "map" }
+variable "sqs_ocr" { type = "map" }
 
 # Provider Block
 provider "aws" {
@@ -78,6 +79,15 @@ resource "aws_sqs_queue" "sqs_query_db_dl" {
   receive_wait_time_seconds = 10
 }
 
+resource "aws_sqs_queue" "sqs_ocr_dl" {
+  name                      = "${lookup(var.sqs_ocr, terraform.workspace)}-dl"
+  delay_seconds             = 0
+  visibility_timeout_seconds = 30
+  max_message_size          = 2048
+  message_retention_seconds = 86400
+  receive_wait_time_seconds = 10
+}
+
 resource "aws_sqs_queue" "sqs_query_logs" {
   name                      = "${lookup(var.sqs_query_logs, terraform.workspace)}"
   delay_seconds             = 0
@@ -98,6 +108,16 @@ resource "aws_sqs_queue" "sqs_query_db" {
 
 }
 
+resource "aws_sqs_queue" "sqs_ocr" {
+  name                      = "${lookup(var.sqs_ocr, terraform.workspace)}"
+  delay_seconds             = 0
+  max_message_size          = 4096
+  message_retention_seconds = 3600
+  visibility_timeout_seconds = 1800
+  redrive_policy            = "{\"deadLetterTargetArn\":\"${aws_sqs_queue.sqs_ocr_dl.arn}\",\"maxReceiveCount\":5}"
+
+}
+
 ## S3 Bucket
 resource "aws_s3_bucket" "s3bucket_domains" {
   bucket = "${lookup(var.s3bucket_domains, terraform.workspace)}"
@@ -105,8 +125,7 @@ resource "aws_s3_bucket" "s3bucket_domains" {
   force_destroy = false
 }
 
-## S3 Bucket
-resource "aws_s3_bucket" "s3bucket_ocr_domains" {
+resource "aws_s3_bucket" "s3bucket_ocr" {
   bucket = "${lookup(var.s3bucket_ocr, terraform.workspace)}"
   acl    = "private"
   force_destroy = false
@@ -178,6 +197,22 @@ resource "aws_ssm_parameter" "ssm_sqs_query_db_url" {
   overwrite = true
 }
 
+resource "aws_ssm_parameter" "ssm_sqs_ocr_arn" {
+  type  = "String"
+  description = "Que for querying dynamoDB table into S3"
+  name  = "/${var.app_name}/${terraform.workspace}/sqs_ocr_arn"
+  value = "${aws_sqs_queue.sqs_ocr.arn}"
+  overwrite = true
+}
+
+resource "aws_ssm_parameter" "ssm_sqs_ocr_url" {
+  type  = "String"
+  description = "Que for OCR-ing domains"
+  name  = "/${var.app_name}/${terraform.workspace}/sqs_ocr_url"
+  value = "${aws_sqs_queue.sqs_ocr.id}"
+  overwrite = true
+}
+
 resource "aws_ssm_parameter" "ssm_sqs_query_logs_dl_url" {
   type  = "String"
   description = "Dead Letter Que for querying certificate logs"
@@ -191,6 +226,14 @@ resource "aws_ssm_parameter" "ssm_sqs_query_db_dl_url" {
   description = "Dead Letter Que for querying certificate DB"
   name  = "/${var.app_name}/${terraform.workspace}/sqs_query_db_dl_url"
   value = "${aws_sqs_queue.sqs_query_db_dl.id}"
+  overwrite = true
+}
+
+resource "aws_ssm_parameter" "ssm_sqs_ocr_dl_url" {
+  type  = "String"
+  description = "Dead Letter que for ocr que"
+  name  = "/${var.app_name}/${terraform.workspace}/sqs_ocr_dl_url"
+  value = "${aws_sqs_queue.sqs_ocr_dl.id}"
   overwrite = true
 }
 
@@ -208,5 +251,18 @@ resource "aws_ssm_parameter" "ssm_s3bucket_domains_arn" {
   overwrite = true
 }
 
+resource "aws_ssm_parameter" "ssm_s3bucket_ocr" {
+  type  = "String"
+  name  = "/${var.app_name}/${terraform.workspace}/s3bucket_ocr"
+  value = "${aws_s3_bucket.s3bucket_ocr.bucket}"
+  overwrite = true
+}
+
+resource "aws_ssm_parameter" "ssm_s3bucket_ocr_arn" {
+  type  = "String"
+  name  = "/${var.app_name}/${terraform.workspace}/s3bucket_ocr_arn"
+  value = "${aws_s3_bucket.s3bucket_ocr.arn}"
+  overwrite = true
+}
 
 
