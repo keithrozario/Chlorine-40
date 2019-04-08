@@ -7,7 +7,7 @@ plugins:
 provider:
   name: aws
   runtime: python3.7
-  stage: ${opt:stage, 'default'}
+  stage: ${opt:stage, 'prod'}
   region: ${file(../infra/terraform.tfvars.json):aws_region.${self:provider.stage}}
   versionFunctions: false
   logRetentionInDays: 1
@@ -145,15 +145,12 @@ functions:
           - ':'
           - - 'arn:aws:lambda'
             - Ref: 'AWS::Region'
-            - Ref: 'AWS::AccountId'
-            - 'layer:tesseract:1'
+            - '113088814899:layer:Klayers--tesseract:1'
       - 'Fn::Join':
           - ':'
           - - 'arn:aws:lambda'
             - Ref: 'AWS::Region'
             - '113088814899:layer:Klayers-python37-pytesseract:1'
-
-
 
 
 # don't package these files

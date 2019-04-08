@@ -19,7 +19,7 @@ if __name__ == '__main__':
     console.setLevel(logging.INFO)
     logger.addHandler(console)
 
-    env = 'default'
+    env = 'prod'
 
     # Get existing config
     config = get_config()

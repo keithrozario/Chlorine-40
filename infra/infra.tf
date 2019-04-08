@@ -125,10 +125,16 @@ resource "aws_s3_bucket" "s3bucket_domains" {
   force_destroy = false
 }
 
+## S3 Bucket and Athena Database
 resource "aws_s3_bucket" "s3bucket_ocr" {
   bucket = "${lookup(var.s3bucket_ocr, terraform.workspace)}"
   acl    = "private"
   force_destroy = false
+}
+
+resource "aws_athena_database" "ocr_output" {
+  name = "ocr_database"
+  bucket = "${aws_s3_bucket.s3bucket_ocr.bucket}"
 }
 
 
